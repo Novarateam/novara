@@ -1,4 +1,4 @@
-import { AgentRuntime } from "./runtime";
+import { AgentRuntime } from "./runtime.ts";
 
 const runtime = new AgentRuntime();
 

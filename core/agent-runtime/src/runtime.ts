@@ -1,5 +1,5 @@
-import { Agent } from "./agent";
-import { AgentDefinition, AgentTask } from "./types";
+import { Agent } from "./agent.ts";
+import type { AgentDefinition, AgentTask } from "./types.ts";
 
 export class AgentRuntime {
   private agents = new Map<string, Agent>();

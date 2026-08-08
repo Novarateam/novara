@@ -1,12 +1,16 @@
-import {
+import type {
   AgentDefinition,
   AgentResult,
   AgentTask,
   PerformanceEvent,
-} from "./types";
+} from "./types.ts";
 
 export class Agent {
-  constructor(public readonly definition: AgentDefinition) {}
+  public readonly definition: AgentDefinition;
+
+  constructor(definition: AgentDefinition) {
+    this.definition = definition;
+  }
 
   execute(task: AgentTask): {
     result: AgentResult;

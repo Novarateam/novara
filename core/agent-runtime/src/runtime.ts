@@ -15,6 +15,14 @@ import type {
   StoreMemoryResponse,
 } from "./types.ts";
 
+function readStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.filter((item): item is string => typeof item === "string");
+}
+
 export class AgentRuntime {
   private agents = new Map<string, Agent>();
   private readonly memory: CompanyMemory;
@@ -69,6 +77,14 @@ export class AgentRuntime {
     const structuredResult = output?.structuredResult;
 
     if (structuredResult) {
+      const recommendationStatus =
+        typeof structuredResult === "object" &&
+        structuredResult !== null &&
+        "recommendationStatus" in structuredResult &&
+        (structuredResult as { recommendationStatus?: CompanyMemoryStatus }).recommendationStatus
+          ? (structuredResult as { recommendationStatus?: CompanyMemoryStatus }).recommendationStatus
+          : "proposed";
+
       const evidenceEntry: CompanyMemoryEntry = {
         id: `mem-${task.id}-${agentId}`,
         type: "evidence",
@@ -82,18 +98,42 @@ export class AgentRuntime {
         timestamp: new Date().toISOString(),
         confidence: structuredResult.confidence ?? 0.5,
         authority: "recommend",
-        status: "proposed",
+        status: recommendationStatus,
       };
 
       this.memory.add(evidenceEntry);
 
+      const supportedByExternalEvidence =
+        typeof structuredResult === "object" &&
+        structuredResult !== null &&
+        "supportedByExternalEvidence" in structuredResult
+          ? Boolean((structuredResult as { supportedByExternalEvidence?: boolean }).supportedByExternalEvidence)
+          : false;
+
+      const unresolvedQuestions =
+        typeof structuredResult === "object" &&
+        structuredResult !== null &&
+        "unresolvedQuestions" in structuredResult
+          ? readStringArray((structuredResult as { unresolvedQuestions?: unknown }).unresolvedQuestions)
+          : [];
+
       const stateUpdate: Partial<CompanyState> = {
         objectives: task.objective ? [task.objective] : [],
-        priorities: ["Capture A-002 opportunity signal"],
-        activeWork: ["A-002 opportunity discovery"],
+        priorities: supportedByExternalEvidence
+          ? ["Advance the verified opportunity"]
+          : ["Resolve missing evidence for the proposed opportunity"],
+        activeWork: supportedByExternalEvidence
+          ? ["A-002 opportunity execution"]
+          : ["A-002 evidence review"],
         opportunities: structuredResult.title ? [structuredResult.title] : [],
-        risks: ["Opportunity remains unverified"],
-        pendingDecisions: ["Whether to pursue the proposed opportunity"],
+        risks: supportedByExternalEvidence
+          ? ["Opportunity requires disciplined execution"]
+          : ["Opportunity remains proposed because external evidence is still insufficient"],
+        pendingDecisions: unresolvedQuestions.length > 0
+          ? unresolvedQuestions
+          : supportedByExternalEvidence
+            ? ["Confirm execution timing"]
+            : ["Whether to pursue the proposed opportunity"],
       };
 
       this.state.updateState(stateUpdate);
@@ -128,6 +168,9 @@ export class AgentRuntime {
           input: {
             focus: directorDecision.delegatedTask ?? "Opportunity discovery",
             sourceDecision: directorDecision,
+            evidence: Array.isArray(output?.context?.priorOpportunityEvidence)
+              ? output?.context?.priorOpportunityEvidence
+              : [],
           },
         };
 

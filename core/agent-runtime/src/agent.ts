@@ -7,6 +7,114 @@ import type {
   PerformanceEvent,
 } from "./types.ts";
 
+type OpportunityEvidence = {
+  id?: string;
+  type?: string;
+  status?: string;
+  source?: string;
+  confidence?: number;
+  content?: unknown;
+};
+
+type OpportunityAssessment = {
+  supportedByExternalEvidence: boolean;
+  recommendationStatus: "proposed" | "verified";
+  confidence: number;
+  summary: string;
+  reasons: string[];
+  missing: string[];
+  evidenceUsed: string[];
+};
+
+function readStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.filter((item): item is string => typeof item === "string");
+}
+
+function extractOpportunityEvidence(context?: AgentExecutionContext): OpportunityEvidence[] {
+  if (!context) {
+    return [];
+  }
+
+  return context.memory.filter((entry) => {
+    if (entry.type !== "evidence" && entry.type !== "knowledge") {
+      return false;
+    }
+
+    if (typeof entry.source === "string" && entry.source.toLowerCase().includes("metricool")) {
+      return true;
+    }
+
+    const content = entry.content;
+    if (!content || typeof content !== "object") {
+      return false;
+    }
+
+    const payload = content as Record<string, unknown>;
+    const source = payload.source;
+    const opportunity = payload.opportunity;
+    return (
+      (typeof source === "string" && source.toLowerCase().includes("metricool")) ||
+      (typeof opportunity === "string" && opportunity.toLowerCase().includes("socials growth sprint"))
+    );
+  }) as OpportunityEvidence[];
+}
+
+function evaluateOpportunityEvidence(evidence: OpportunityEvidence[]): OpportunityAssessment {
+  const evidenceUsed = evidence.map((entry) => entry.id ?? entry.source ?? "unknown");
+  const evidenceText = evidence
+    .map((entry) => JSON.stringify(entry.content ?? {}))
+    .join("\n")
+    .toLowerCase();
+
+  const hasZeroStateSignals =
+    evidenceText.includes("zero followers") ||
+    evidenceText.includes("zero posts") ||
+    evidenceText.includes("zero content") ||
+    evidenceText.includes("no posts") ||
+    evidenceText.includes("no scheduled posts");
+
+  const hasBenchmarkOnlySignals =
+    evidenceText.includes("best-time") ||
+    evidenceText.includes("benchmark") ||
+    evidenceText.includes("directional guidance");
+
+  const supportedByExternalEvidence = !hasZeroStateSignals && !hasBenchmarkOnlySignals && evidence.length > 0;
+
+  if (supportedByExternalEvidence) {
+    return {
+      supportedByExternalEvidence: true,
+      recommendationStatus: "verified",
+      confidence: 0.78,
+      summary: "Metricool evidence supports advancing the opportunity beyond proposal.",
+      reasons: ["External evidence shows non-zero activity and audience signal."],
+      missing: [],
+      evidenceUsed,
+    };
+  }
+
+  return {
+    supportedByExternalEvidence: false,
+    recommendationStatus: "proposed",
+    confidence: 0.32,
+    summary:
+      "Metricool evidence does not yet support verification; the opportunity should remain proposed until the account has real content and audience signal.",
+    reasons: [
+      "Current external evidence shows a zero-state account or benchmark-only guidance rather than measured growth.",
+    ],
+    missing: [
+      "Published content",
+      "Non-zero audience baseline",
+      "Scheduled content pipeline",
+      "Performance data from real posts",
+    ],
+    evidenceUsed,
+  };
+}
+
 export function getAgentDefinitions(): AgentDefinition[] {
   return [
     {
@@ -48,15 +156,7 @@ export class Agent {
         : undefined;
 
     const priorOpportunityEvidence = context
-      ? context.memory
-          .filter(
-            (entry) =>
-              entry.type === "evidence" ||
-              (entry.type === "knowledge" &&
-                typeof entry.content === "object" &&
-                entry.content !== null &&
-                "structuredResult" in entry.content)
-          )
+      ? extractOpportunityEvidence(context)
           .slice(-5)
           .map((entry) => ({
             id: entry.id,
@@ -100,18 +200,32 @@ export class Agent {
 
     const output =
       this.definition.id === "A-002"
-        ? {
-            message: `Agent ${this.definition.name} produced a structured opportunity signal.`,
-            objective: task.objective,
-            structuredResult: {
-              title: "Novara Socials growth sprint",
-              summary: "A concise social attention opportunity grounded in the current objective.",
-              confidence: 0.82,
-              source: task.id,
-            },
-            input: task.input,
-            context: contextSummary,
-          }
+        ? (() => {
+            const input = (task.input as Record<string, unknown> | undefined) ?? {};
+            const evidence = Array.isArray(input.evidence) ? input.evidence : [];
+            const contextEvidence = extractOpportunityEvidence(context);
+            const assessment = evaluateOpportunityEvidence(
+              evidence.length > 0 ? (evidence as OpportunityEvidence[]) : contextEvidence,
+            );
+
+            return {
+              message: `Agent ${this.definition.name} evaluated the available external evidence before forming a recommendation.`,
+              objective: task.objective,
+              structuredResult: {
+                title: "Novara Socials growth sprint",
+                summary: assessment.summary,
+                confidence: assessment.confidence,
+                source: task.id,
+                supportedByExternalEvidence: assessment.supportedByExternalEvidence,
+                recommendationStatus: assessment.recommendationStatus,
+                reasons: assessment.reasons,
+                unresolvedQuestions: assessment.missing,
+                evidenceUsed: assessment.evidenceUsed,
+              },
+              input: task.input,
+              context: contextSummary,
+            };
+          })()
         : {
             message: `Agent ${this.definition.name} reviewed the current company context and delegated the opportunity task to A-002.`,
             objective: task.objective,
@@ -132,8 +246,14 @@ export class Agent {
             directorDecision: {
               objective: task.objective,
               selectedAgent: "A-002",
-              delegatedTask: `Discover an opportunity aligned to: ${task.objective}`,
-              reason: "Use existing company context to prioritize a concrete opportunity signal.",
+              delegatedTask:
+                priorOpportunityEvidence.length > 0
+                  ? `Evaluate the external evidence for: ${task.objective}. Determine whether the opportunity should remain proposed or be verified.`
+                  : `Discover an opportunity aligned to: ${task.objective}`,
+              reason:
+                priorOpportunityEvidence.length > 0
+                  ? "Relevant external evidence exists in company context; delegate an evidence-based review before advancing status."
+                  : "Use existing company context to prioritize a concrete opportunity signal.",
             } as DirectorDecision,
           };
 

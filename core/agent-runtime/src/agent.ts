@@ -7,6 +7,27 @@ import type {
   PerformanceEvent,
 } from "./types.ts";
 
+export function getAgentDefinitions(): AgentDefinition[] {
+  return [
+    {
+      id: "A-001",
+      name: "architect",
+      version: "0.1",
+      status: "planned",
+      mission: "Coordinate the initial Novara structure and objective framing.",
+      authority: "delegate",
+    },
+    {
+      id: "A-002",
+      name: "opportunity",
+      version: "0.1",
+      status: "observed",
+      mission: "Find opportunities to create valuable attention.",
+      authority: "recommend",
+    },
+  ];
+}
+
 export class Agent {
   definition: AgentDefinition;
 

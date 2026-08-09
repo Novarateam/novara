@@ -691,3 +691,25 @@ Capabilities can evolve.
 Agents can be replaced.
 
 **Novara must remain.**
+
+---
+
+# 24. Checkpoint Record
+
+## 24.01 Metricool Read-Only Integration Checkpoint (2026-08-09)
+
+Status:
+
+* completed
+
+Scope:
+
+* Hermes native MCP registration for Metricool confirmed
+* integration verified with read-only evidence retrieval only
+* no publish, schedule, edit, delete, or spend actions performed
+
+Evidence summary:
+
+* MCP connectivity verified
+* read-only analytics and best-time evidence retrieved for the Socials growth sprint context
+* mutating tools were intentionally not used during verification

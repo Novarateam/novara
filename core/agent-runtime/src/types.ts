@@ -90,6 +90,37 @@ export interface DirectorDecision {
   reason: string;
 }
 
+export interface CompanyBrief {
+  objective: string | null;
+  state: CompanyState;
+  memory: CompanyMemoryEntry[];
+  recentMemory: CompanyMemoryEntry[];
+  risks: string[];
+  opportunities: string[];
+  pendingDecisions: string[];
+  summary: string;
+}
+
+export interface DirectorDecisionResponse {
+  objective: string;
+  decision: DirectorDecision | null;
+  output: unknown;
+  taskId: string;
+}
+
+export interface SpecialistExecutionResponse {
+  agentId: string;
+  taskId: string;
+  result: AgentResult;
+}
+
+export interface EscalationResponse {
+  escalated: boolean;
+  requiresCEOAttention: boolean;
+  reason: string;
+  status: "escalated";
+}
+
 export interface StoreMemoryRequest {
   entry: CompanyMemoryEntry;
 }

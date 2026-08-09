@@ -1,26 +1,13 @@
+import { getAgentDefinitions } from "./agent.ts";
 import { AgentRuntime } from "./runtime.ts";
 
 const runtime = new AgentRuntime();
 const memory = runtime.getMemory();
 const stateStore = runtime.getState();
 
-runtime.registerAgent({
-  id: "A-001",
-  name: "architect",
-  version: "0.1",
-  status: "planned",
-  mission: "Coordinate the initial Novara structure and objective framing.",
-  authority: "delegate",
-});
-
-runtime.registerAgent({
-  id: "A-002",
-  name: "opportunity",
-  version: "0.1",
-  status: "observed",
-  mission: "Find opportunities to create valuable attention.",
-  authority: "recommend",
-});
+for (const definition of getAgentDefinitions()) {
+  runtime.registerAgent(definition);
+}
 
 const objective = "Create a durable social attention engine for Novara.";
 

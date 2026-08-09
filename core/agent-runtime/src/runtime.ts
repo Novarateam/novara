@@ -5,8 +5,12 @@ import type {
   AgentDefinition,
   AgentExecutionContext,
   AgentTask,
+  CompanyBrief,
   CompanyMemoryEntry,
   CompanyState,
+  DirectorDecisionResponse,
+  EscalationResponse,
+  SpecialistExecutionResponse,
   StoreMemoryRequest,
   StoreMemoryResponse,
 } from "./types.ts";
@@ -29,29 +33,84 @@ export class AgentRuntime {
     this.agents.set(definition.id, new Agent(definition));
   }
 
-  execute(agentId: string, task: AgentTask) {
-    const agent = this.agents.get(agentId);
-
-    if (!agent) {
-      throw new Error(`Agent not found: ${agentId}`);
-    }
-
-    const context: AgentExecutionContext = {
+  private buildContext(): AgentExecutionContext {
+    return {
       memory: this.memory.list(),
       state: this.state.getState(),
     };
+  }
 
-    const contextualTask: AgentTask = {
+  private buildContextualTask(task: AgentTask): AgentTask {
+    const context = this.buildContext();
+    return {
       ...task,
       input:
         typeof task.input === "object" && task.input !== null
           ? { ...(task.input as Record<string, unknown>), context }
           : { context },
     };
+  }
 
+  private recordSpecialistEvidence(agentId: string, task: AgentTask, execution: { result: { output?: unknown } }) {
+    if (agentId !== "A-002") {
+      return;
+    }
+
+    const output = execution.result.output as
+      | {
+          structuredResult?: {
+            title?: string;
+            summary?: string;
+            confidence?: number;
+            source?: string;
+          };
+        }
+      | undefined;
+    const structuredResult = output?.structuredResult;
+
+    if (structuredResult) {
+      const evidenceEntry: CompanyMemoryEntry = {
+        id: `mem-${task.id}-${agentId}`,
+        type: "evidence",
+        content: {
+          objective: task.objective,
+          structuredResult,
+          note:
+            "A-002 produced a structured opportunity signal that should be treated as evidence, not verified knowledge.",
+        },
+        source: `A-002/${task.id}`,
+        timestamp: new Date().toISOString(),
+        confidence: structuredResult.confidence ?? 0.5,
+        authority: "recommend",
+        status: "proposed",
+      };
+
+      this.memory.add(evidenceEntry);
+
+      const stateUpdate: Partial<CompanyState> = {
+        objectives: task.objective ? [task.objective] : [],
+        priorities: ["Capture A-002 opportunity signal"],
+        activeWork: ["A-002 opportunity discovery"],
+        opportunities: structuredResult.title ? [structuredResult.title] : [],
+        risks: ["Opportunity remains unverified"],
+        pendingDecisions: ["Whether to pursue the proposed opportunity"],
+      };
+
+      this.state.updateState(stateUpdate);
+    }
+  }
+
+  private executeInternal(agentId: string, task: AgentTask, options?: { autoDelegate?: boolean }) {
+    const agent = this.agents.get(agentId);
+
+    if (!agent) {
+      throw new Error(`Agent not found: ${agentId}`);
+    }
+
+    const contextualTask = this.buildContextualTask(task);
     const execution = agent.execute(contextualTask);
 
-    if (agentId === "A-001") {
+    if (options?.autoDelegate !== false && agentId === "A-001") {
       const output = execution.result.output as
         | {
             directorDecision?: {
@@ -81,55 +140,11 @@ export class AgentRuntime {
               ...(typeof delegatedTask.input === "object" && delegatedTask.input !== null
                 ? (delegatedTask.input as Record<string, unknown>)
                 : {}),
-              context: {
-                memory: this.memory.list(),
-                state: this.state.getState(),
-              },
+              context: this.buildContext(),
             },
           });
 
-          const output = specialistExecution.result.output as
-            | {
-                structuredResult?: {
-                  title?: string;
-                  summary?: string;
-                  confidence?: number;
-                  source?: string;
-                };
-              }
-            | undefined;
-          const structuredResult = output?.structuredResult;
-
-          if (structuredResult) {
-            const evidenceEntry: CompanyMemoryEntry = {
-              id: `mem-${task.id}-A-002`,
-              type: "evidence",
-              content: {
-                objective: task.objective,
-                structuredResult,
-                note:
-                  "A-002 produced a structured opportunity signal that should be treated as evidence, not verified knowledge.",
-              },
-              source: `A-002/${task.id}`,
-              timestamp: new Date().toISOString(),
-              confidence: structuredResult.confidence ?? 0.5,
-              authority: "recommend",
-              status: "proposed",
-            };
-
-            this.memory.add(evidenceEntry);
-
-            const stateUpdate: Partial<CompanyState> = {
-              objectives: task.objective ? [task.objective] : [],
-              priorities: ["Capture A-002 opportunity signal"],
-              activeWork: ["A-002 opportunity discovery"],
-              opportunities: structuredResult.title ? [structuredResult.title] : [],
-              risks: ["Opportunity remains unverified"],
-              pendingDecisions: ["Whether to pursue the proposed opportunity"],
-            };
-
-            this.state.updateState(stateUpdate);
-          }
+          this.recordSpecialistEvidence("A-002", delegatedTask, specialistExecution);
 
           return {
             ...execution,
@@ -140,51 +155,99 @@ export class AgentRuntime {
     }
 
     if (agentId === "A-002") {
-      const output = execution.result.output as
-        | {
-            structuredResult?: {
-              title?: string;
-              summary?: string;
-              confidence?: number;
-              source?: string;
-            };
-          }
-        | undefined;
-      const structuredResult = output?.structuredResult;
-
-      if (structuredResult) {
-        const evidenceEntry: CompanyMemoryEntry = {
-          id: `mem-${task.id}-${agentId}`,
-          type: "evidence",
-          content: {
-            objective: task.objective,
-            structuredResult,
-            note:
-              "A-002 produced a structured opportunity signal that should be treated as evidence, not verified knowledge.",
-          },
-          source: `A-002/${task.id}`,
-          timestamp: new Date().toISOString(),
-          confidence: structuredResult.confidence ?? 0.5,
-          authority: "recommend",
-          status: "proposed",
-        };
-
-        this.memory.add(evidenceEntry);
-
-        const stateUpdate: Partial<CompanyState> = {
-          objectives: task.objective ? [task.objective] : [],
-          priorities: ["Capture A-002 opportunity signal"],
-          activeWork: ["A-002 opportunity discovery"],
-          opportunities: structuredResult.title ? [structuredResult.title] : [],
-          risks: ["Opportunity remains unverified"],
-          pendingDecisions: ["Whether to pursue the proposed opportunity"],
-        };
-
-        this.state.updateState(stateUpdate);
-      }
+      this.recordSpecialistEvidence(agentId, task, execution);
     }
 
     return execution;
+  }
+
+  execute(agentId: string, task: AgentTask) {
+    return this.executeInternal(agentId, task, { autoDelegate: true });
+  }
+
+  getCompanyBrief(): CompanyBrief {
+    const state = this.state.getState();
+    const memoryEntries = this.memory.list();
+    const recentMemory = memoryEntries.slice(-3);
+
+    return {
+      objective: state.objectives[0] ?? null,
+      state,
+      memory: memoryEntries,
+      recentMemory,
+      risks: state.risks,
+      opportunities: state.opportunities,
+      pendingDecisions: state.pendingDecisions,
+      summary: `Objective: ${state.objectives[0] ?? "none"}; active work: ${state.activeWork.join(", ") || "none"}; opportunities: ${state.opportunities.join(", ") || "none"}`,
+    };
+  }
+
+  requestDirectorDecision(objective: string): DirectorDecisionResponse {
+    const execution = this.executeInternal("A-001", {
+      id: `director-${Date.now()}`,
+      objective,
+      input: {
+        source: "mcp",
+      },
+    }, { autoDelegate: false });
+
+    const output = execution.result.output as
+      | {
+          directorDecision?: {
+            objective?: string;
+            selectedAgent?: string;
+            delegatedTask?: string;
+            reason?: string;
+          };
+        }
+      | undefined;
+
+    return {
+      objective,
+      decision: output?.directorDecision
+        ? {
+            objective: output.directorDecision.objective ?? objective,
+            selectedAgent: output.directorDecision.selectedAgent ?? "",
+            delegatedTask: output.directorDecision.delegatedTask ?? "",
+            reason: output.directorDecision.reason ?? "",
+          }
+        : null,
+      output: execution.result.output,
+      taskId: execution.result.taskId,
+    };
+  }
+
+  executeSpecialist(agentId: string, task: AgentTask): SpecialistExecutionResponse {
+    if (agentId !== "A-002") {
+      throw new Error("Only A-002 is currently allowed through the MCP interface.");
+    }
+
+    const agent = this.agents.get(agentId);
+
+    if (!agent) {
+      throw new Error(`Agent not found: ${agentId}`);
+    }
+
+    if (agent.definition.authority !== "recommend") {
+      throw new Error("Specialist authority is not permitted for MCP execution.");
+    }
+
+    const execution = this.executeInternal(agentId, task, { autoDelegate: false });
+
+    return {
+      agentId,
+      taskId: execution.result.taskId,
+      result: execution.result,
+    };
+  }
+
+  escalate(reason: string): EscalationResponse {
+    return {
+      escalated: true,
+      requiresCEOAttention: true,
+      reason,
+      status: "escalated",
+    };
   }
 
   listAgents(): AgentDefinition[] {

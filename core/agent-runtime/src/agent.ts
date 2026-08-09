@@ -28,7 +28,14 @@ export class Agent {
     const contextSummary = context
       ? {
           memoryEntries: context.memory.length,
+          recentMemory: context.memory.slice(-3).map((entry) => ({
+            id: entry.id,
+            type: entry.type,
+            status: entry.status,
+          })),
           stateObjectives: context.state.objectives,
+          stateActiveWork: context.state.activeWork,
+          stateOpportunities: context.state.opportunities,
         }
       : undefined;
 
@@ -47,10 +54,16 @@ export class Agent {
             context: contextSummary,
           }
         : {
-            message: `Agent ${this.definition.name} received the task.`,
+            message: `Agent ${this.definition.name} reviewed the current company context and delegated the opportunity task to A-002.`,
             objective: task.objective,
             input: task.input,
             context: contextSummary,
+            delegation: {
+              target: "A-002",
+              focus:
+                contextSummary?.stateObjectives?.[0] ?? task.objective,
+              usedExistingContext: Boolean(contextSummary),
+            },
           };
 
     const result: AgentResult = {

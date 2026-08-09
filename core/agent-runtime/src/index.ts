@@ -10,7 +10,7 @@ runtime.registerAgent({
   version: "0.1",
   status: "planned",
   mission: "Coordinate the initial Novara structure and objective framing.",
-  authority: "recommend",
+  authority: "delegate",
 });
 
 runtime.registerAgent({

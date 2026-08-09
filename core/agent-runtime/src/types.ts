@@ -46,3 +46,34 @@ export interface PerformanceEvent {
   timestamp: string;
   metadata?: Record<string, unknown>;
 }
+
+export type CompanyMemoryType =
+  | "objective"
+  | "decision"
+  | "knowledge"
+  | "evidence"
+  | "experiment"
+  | "learning";
+
+export type CompanyMemoryStatus = "proposed" | "verified" | "superseded";
+
+export interface CompanyMemoryEntry {
+  id: string;
+  type: CompanyMemoryType;
+  content: unknown;
+  source: string;
+  timestamp: string;
+  confidence: number;
+  authority: AuthorityLevel;
+  status: CompanyMemoryStatus;
+}
+
+export interface CompanyState {
+  objectives: string[];
+  priorities: string[];
+  activeWork: string[];
+  opportunities: string[];
+  risks: string[];
+  pendingDecisions: string[];
+  lastUpdated: string;
+}

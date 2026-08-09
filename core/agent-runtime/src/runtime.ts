@@ -3,9 +3,12 @@ import { CompanyMemory } from "./company-memory.ts";
 import { CompanyStateStore } from "./company-state.ts";
 import type {
   AgentDefinition,
+  AgentExecutionContext,
   AgentTask,
   CompanyMemoryEntry,
   CompanyState,
+  StoreMemoryRequest,
+  StoreMemoryResponse,
 } from "./types.ts";
 
 export class AgentRuntime {
@@ -33,7 +36,20 @@ export class AgentRuntime {
       throw new Error(`Agent not found: ${agentId}`);
     }
 
-    const execution = agent.execute(task);
+    const context: AgentExecutionContext = {
+      memory: this.memory.list(),
+      state: this.state.getState(),
+    };
+
+    const contextualTask: AgentTask = {
+      ...task,
+      input:
+        typeof task.input === "object" && task.input !== null
+          ? { ...(task.input as Record<string, unknown>), context }
+          : { context },
+    };
+
+    const execution = agent.execute(contextualTask);
 
     if (agentId === "A-002") {
       const output = execution.result.output as
@@ -95,5 +111,10 @@ export class AgentRuntime {
 
   getState(): CompanyStateStore {
     return this.state;
+  }
+
+  storeMemory(request: StoreMemoryRequest): StoreMemoryResponse {
+    const entry = this.memory.add(request.entry);
+    return { entry };
   }
 }

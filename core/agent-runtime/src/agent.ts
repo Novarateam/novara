@@ -1,5 +1,6 @@
 import type {
   AgentDefinition,
+  AgentExecutionContext,
   AgentResult,
   AgentTask,
   PerformanceEvent,
@@ -17,6 +18,20 @@ export class Agent {
     event: PerformanceEvent;
   } {
     const timestamp = new Date().toISOString();
+    const context =
+      typeof task.input === "object" &&
+      task.input !== null &&
+      "context" in task.input
+        ? (task.input as { context?: AgentExecutionContext }).context
+        : undefined;
+
+    const contextSummary = context
+      ? {
+          memoryEntries: context.memory.length,
+          stateObjectives: context.state.objectives,
+        }
+      : undefined;
+
     const output =
       this.definition.id === "A-002"
         ? {
@@ -29,11 +44,13 @@ export class Agent {
               source: task.id,
             },
             input: task.input,
+            context: contextSummary,
           }
         : {
             message: `Agent ${this.definition.name} received the task.`,
             objective: task.objective,
             input: task.input,
+            context: contextSummary,
           };
 
     const result: AgentResult = {

@@ -77,3 +77,16 @@ export interface CompanyState {
   pendingDecisions: string[];
   lastUpdated: string;
 }
+
+export interface AgentExecutionContext {
+  memory: CompanyMemoryEntry[];
+  state: CompanyState;
+}
+
+export interface StoreMemoryRequest {
+  entry: CompanyMemoryEntry;
+}
+
+export interface StoreMemoryResponse {
+  entry: CompanyMemoryEntry;
+}

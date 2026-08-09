@@ -45,6 +45,24 @@ const opportunitySignal = (a002Result.result.output as { structuredResult?: { ti
 console.log("\n--- NOVARA AGENT RUNTIME TEST ---\n");
 console.log("Registered agents:");
 console.log(runtime.listAgents());
+
+const stored = runtime.storeMemory({
+  entry: {
+    id: "mem-runtime-store",
+    type: "learning",
+    content: {
+      note: "Runtime memory store capability is available.",
+    },
+    source: "runtime/demo",
+    timestamp: new Date().toISOString(),
+    confidence: 0.9,
+    authority: "recommend",
+    status: "proposed",
+  },
+});
+
+console.log("\nStored memory via runtime capability:");
+console.log(stored.entry);
 console.log("\nA-001 result:");
 console.log(a001Result.result);
 console.log("\nA-002 result:");

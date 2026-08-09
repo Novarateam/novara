@@ -25,6 +25,41 @@ export class Agent {
         ? (task.input as { context?: AgentExecutionContext }).context
         : undefined;
 
+    const priorOpportunityEvidence = context
+      ? context.memory
+          .filter(
+            (entry) =>
+              entry.type === "evidence" ||
+              (entry.type === "knowledge" &&
+                typeof entry.content === "object" &&
+                entry.content !== null &&
+                "structuredResult" in entry.content)
+          )
+          .slice(-5)
+          .map((entry) => ({
+            id: entry.id,
+            type: entry.type,
+            status: entry.status,
+            source: entry.source,
+            confidence: entry.confidence,
+          }))
+      : [];
+
+    const statusBreakdown = context
+      ? {
+          proposed: context.memory.filter((entry) => entry.status === "proposed")
+            .length,
+          verified: context.memory.filter((entry) => entry.status === "verified")
+            .length,
+          superseded: context.memory.filter((entry) => entry.status === "superseded")
+            .length,
+        }
+      : {
+          proposed: 0,
+          verified: 0,
+          superseded: 0,
+        };
+
     const contextSummary = context
       ? {
           memoryEntries: context.memory.length,
@@ -36,6 +71,8 @@ export class Agent {
           stateObjectives: context.state.objectives,
           stateActiveWork: context.state.activeWork,
           stateOpportunities: context.state.opportunities,
+          priorOpportunityEvidence,
+          statusBreakdown,
         }
       : undefined;
 
@@ -64,6 +101,12 @@ export class Agent {
                 contextSummary?.stateObjectives?.[0] ?? task.objective,
               usedExistingContext: Boolean(contextSummary),
             },
+            learningLoop: contextSummary
+              ? {
+                  priorOpportunityEvidence,
+                  statusBreakdown,
+                }
+              : undefined,
           };
 
     const result: AgentResult = {

@@ -40,6 +40,44 @@ const a002Result = runtime.execute("A-002", {
   },
 });
 
+runtime.storeMemory({
+  entry: {
+    id: "mem-verified-knowledge",
+    type: "knowledge",
+    content: {
+      note: "A verified opportunity pattern is now available for later coordination.",
+    },
+    source: "runtime/demo",
+    timestamp: new Date().toISOString(),
+    confidence: 0.95,
+    authority: "recommend",
+    status: "verified",
+  },
+});
+
+runtime.storeMemory({
+  entry: {
+    id: "mem-superseded-evidence",
+    type: "evidence",
+    content: {
+      note: "A superseded opportunity signal should be treated as historical context.",
+    },
+    source: "runtime/demo",
+    timestamp: new Date().toISOString(),
+    confidence: 0.35,
+    authority: "recommend",
+    status: "superseded",
+  },
+});
+
+const a001FollowUpResult = runtime.execute("A-001", {
+  id: "TASK-003",
+  objective,
+  input: {
+    focus: "Review prior opportunity evidence",
+  },
+});
+
 const opportunitySignal = (a002Result.result.output as { structuredResult?: { title?: string; summary?: string; confidence?: number; source?: string } })?.structuredResult;
 
 console.log("\n--- NOVARA AGENT RUNTIME TEST ---\n");
@@ -67,6 +105,8 @@ console.log("\nA-001 result:");
 console.log(a001Result.result);
 console.log("\nA-002 result:");
 console.log(a002Result.result);
+console.log("\nA-001 follow-up result:");
+console.log(a001FollowUpResult.result);
 console.log("\n--- COMPANY MEMORY ---");
 console.log(memory.list());
 console.log("\n--- COMPANY STATE ---");

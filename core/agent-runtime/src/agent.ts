@@ -202,10 +202,15 @@ export class Agent {
       this.definition.id === "A-002"
         ? (() => {
             const input = (task.input as Record<string, unknown> | undefined) ?? {};
-            const evidence = Array.isArray(input.evidence) ? input.evidence : [];
+            const inputEvidence = Array.isArray(input.evidence)
+              ? (input.evidence as OpportunityEvidence[])
+              : [];
             const contextEvidence = extractOpportunityEvidence(context);
+            const evidence = inputEvidence.some((entry) => entry.content !== undefined)
+              ? inputEvidence
+              : contextEvidence;
             const assessment = evaluateOpportunityEvidence(
-              evidence.length > 0 ? (evidence as OpportunityEvidence[]) : contextEvidence,
+              evidence.length > 0 ? evidence : contextEvidence,
             );
 
             return {

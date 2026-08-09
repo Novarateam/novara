@@ -1,11 +1,8 @@
 import { AgentRuntime } from "./runtime.ts";
-import { CompanyMemory } from "./company-memory.ts";
-import { CompanyStateStore } from "./company-state.ts";
-import type { CompanyMemoryEntry, CompanyState } from "./types.ts";
 
 const runtime = new AgentRuntime();
-const memory = new CompanyMemory();
-const stateStore = new CompanyStateStore();
+const memory = runtime.getMemory();
+const stateStore = runtime.getState();
 
 runtime.registerAgent({
   id: "A-001",
@@ -45,34 +42,6 @@ const a002Result = runtime.execute("A-002", {
 
 const opportunitySignal = (a002Result.result.output as { structuredResult?: { title?: string; summary?: string; confidence?: number; source?: string } })?.structuredResult;
 
-const evidenceEntry: CompanyMemoryEntry = {
-  id: `mem-${Date.now()}`,
-  type: "evidence",
-  content: {
-    objective,
-    structuredResult: opportunitySignal,
-    note: "A-002 produced a structured opportunity signal that should be treated as evidence, not verified knowledge.",
-  },
-  source: `A-002/${a002Result.result.taskId}`,
-  timestamp: new Date().toISOString(),
-  confidence: opportunitySignal?.confidence ?? 0.5,
-  authority: "recommend",
-  status: "proposed",
-};
-
-memory.add(evidenceEntry);
-
-const stateUpdate: Partial<CompanyState> = {
-  objectives: [objective],
-  priorities: ["Clarify CEO objective", "Capture A-002 opportunity signal"],
-  activeWork: ["A-001 objective framing", "A-002 opportunity discovery"],
-  opportunities: [opportunitySignal?.title ?? "Structured opportunity signal"],
-  risks: ["Opportunity remains unverified"],
-  pendingDecisions: ["Whether to pursue the proposed opportunity"],
-};
-
-stateStore.updateState(stateUpdate);
-
 console.log("\n--- NOVARA AGENT RUNTIME TEST ---\n");
 console.log("Registered agents:");
 console.log(runtime.listAgents());
@@ -85,12 +54,13 @@ console.log(memory.list());
 console.log("\n--- COMPANY STATE ---");
 console.log(stateStore.getState());
 console.log("\n--- VERIFICATION DEMO ---");
-const retrieved = memory.get(evidenceEntry.id);
+const createdEntry = memory.list()[0];
+const retrieved = createdEntry ? memory.get(createdEntry.id) : undefined;
 console.log("memory created/retrieved:", Boolean(retrieved));
 
 try {
   memory.add({
-    ...evidenceEntry,
+    ...createdEntry,
     id: "invalid-conf",
     confidence: 1.2,
   });

@@ -1,8 +1,17 @@
 import { Agent } from "./agent.ts";
+import { CompanyMemory } from "./company-memory.ts";
+import { CompanyStateStore } from "./company-state.ts";
 import type { AgentDefinition, AgentTask } from "./types.ts";
 
 export class AgentRuntime {
   private agents = new Map<string, Agent>();
+  private readonly memory: CompanyMemory;
+  private readonly state: CompanyStateStore;
+
+  constructor() {
+    this.memory = new CompanyMemory();
+    this.state = new CompanyStateStore();
+  }
 
   registerAgent(definition: AgentDefinition): void {
     if (this.agents.has(definition.id)) {
@@ -26,5 +35,13 @@ export class AgentRuntime {
     return Array.from(this.agents.values()).map(
       (agent) => agent.definition
     );
+  }
+
+  getMemory(): CompanyMemory {
+    return this.memory;
+  }
+
+  getState(): CompanyStateStore {
+    return this.state;
   }
 }

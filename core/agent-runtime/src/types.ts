@@ -83,6 +83,13 @@ export interface AgentExecutionContext {
   state: CompanyState;
 }
 
+export interface DirectorDecision {
+  objective: string;
+  selectedAgent: string;
+  delegatedTask: string;
+  reason: string;
+}
+
 export interface StoreMemoryRequest {
   entry: CompanyMemoryEntry;
 }

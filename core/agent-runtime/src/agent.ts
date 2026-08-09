@@ -3,6 +3,7 @@ import type {
   AgentExecutionContext,
   AgentResult,
   AgentTask,
+  DirectorDecision,
   PerformanceEvent,
 } from "./types.ts";
 
@@ -107,6 +108,12 @@ export class Agent {
                   statusBreakdown,
                 }
               : undefined,
+            directorDecision: {
+              objective: task.objective,
+              selectedAgent: "A-002",
+              delegatedTask: `Discover an opportunity aligned to: ${task.objective}`,
+              reason: "Use existing company context to prioritize a concrete opportunity signal.",
+            } as DirectorDecision,
           };
 
     const result: AgentResult = {

@@ -32,13 +32,15 @@ const a001Result = runtime.execute("A-001", {
   },
 });
 
-const a002Result = runtime.execute("A-002", {
-  id: "TASK-002",
-  objective,
-  input: {
-    focus: "Opportunity discovery",
-  },
-});
+const a002Result = a001Result.delegatedExecution
+  ? a001Result.delegatedExecution
+  : runtime.execute("A-002", {
+      id: "TASK-002",
+      objective,
+      input: {
+        focus: "Opportunity discovery",
+      },
+    });
 
 runtime.storeMemory({
   entry: {

@@ -51,6 +51,94 @@ export class AgentRuntime {
 
     const execution = agent.execute(contextualTask);
 
+    if (agentId === "A-001") {
+      const output = execution.result.output as
+        | {
+            directorDecision?: {
+              selectedAgent?: string;
+              delegatedTask?: string;
+            };
+          }
+        | undefined;
+      const directorDecision = output?.directorDecision;
+
+      if (directorDecision?.selectedAgent === "A-002") {
+        const delegatedTask: AgentTask = {
+          id: `${task.id}-delegate`,
+          objective: task.objective,
+          input: {
+            focus: directorDecision.delegatedTask ?? "Opportunity discovery",
+            sourceDecision: directorDecision,
+          },
+        };
+
+        const specialist = this.agents.get("A-002");
+
+        if (specialist) {
+          const specialistExecution = specialist.execute({
+            ...delegatedTask,
+            input: {
+              ...(typeof delegatedTask.input === "object" && delegatedTask.input !== null
+                ? (delegatedTask.input as Record<string, unknown>)
+                : {}),
+              context: {
+                memory: this.memory.list(),
+                state: this.state.getState(),
+              },
+            },
+          });
+
+          const output = specialistExecution.result.output as
+            | {
+                structuredResult?: {
+                  title?: string;
+                  summary?: string;
+                  confidence?: number;
+                  source?: string;
+                };
+              }
+            | undefined;
+          const structuredResult = output?.structuredResult;
+
+          if (structuredResult) {
+            const evidenceEntry: CompanyMemoryEntry = {
+              id: `mem-${task.id}-A-002`,
+              type: "evidence",
+              content: {
+                objective: task.objective,
+                structuredResult,
+                note:
+                  "A-002 produced a structured opportunity signal that should be treated as evidence, not verified knowledge.",
+              },
+              source: `A-002/${task.id}`,
+              timestamp: new Date().toISOString(),
+              confidence: structuredResult.confidence ?? 0.5,
+              authority: "recommend",
+              status: "proposed",
+            };
+
+            this.memory.add(evidenceEntry);
+
+            const stateUpdate: Partial<CompanyState> = {
+              objectives: task.objective ? [task.objective] : [],
+              priorities: ["Capture A-002 opportunity signal"],
+              activeWork: ["A-002 opportunity discovery"],
+              opportunities: structuredResult.title ? [structuredResult.title] : [],
+              risks: ["Opportunity remains unverified"],
+              pendingDecisions: ["Whether to pursue the proposed opportunity"],
+            };
+
+            this.state.updateState(stateUpdate);
+          }
+
+          return {
+            ...execution,
+            delegatedExecution: specialistExecution,
+          };
+        }
+      }
+    }
+
     if (agentId === "A-002") {
       const output = execution.result.output as
         | {

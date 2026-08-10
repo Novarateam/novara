@@ -57,6 +57,7 @@ const appState = {
   voiceSequenceTimer: null,
   voiceBusy: false,
   queryDraft: "",
+  audioReactiveLevel: 0,
 };
 
 const voiceController = createVoiceController({
@@ -71,7 +72,22 @@ function setVoiceProvider(provider) {
   voiceController.attachProvider(provider);
 }
 
-setVoiceProvider(createServerVoiceProvider());
+function clamp01(value) {
+  return Math.max(0, Math.min(1, Number(value) || 0));
+}
+
+function setAudioReactiveLevel(level) {
+  appState.audioReactiveLevel = clamp01(level);
+  applySphereReactiveStyle();
+}
+
+setVoiceProvider(
+  createServerVoiceProvider({
+    onAudioLevel: (level) => {
+      setAudioReactiveLevel(level);
+    },
+  }),
+);
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -255,6 +271,7 @@ async function runVoiceInteraction(question) {
   }
 
   appState.voiceBusy = true;
+  setAudioReactiveLevel(0);
 
   try {
     voiceController.thinking();
@@ -278,9 +295,55 @@ async function runVoiceInteraction(question) {
       voiceController.setTranscript("Voice error: unable to play audio.");
     }
   } finally {
+    setAudioReactiveLevel(0);
     appState.voiceBusy = false;
     voiceController.idle();
   }
+}
+
+function applySphereReactiveStyle() {
+  const root = document.querySelector('[data-sphere-root="true"]');
+  const glow = document.querySelector('[data-sphere-glow="true"]');
+  const core = document.querySelector('[data-sphere-core="true"]');
+  const network = document.querySelector('[data-sphere-network="true"]');
+  if (!root || !glow || !core || !network) {
+    return;
+  }
+
+  const mode = appState.voice?.mode ?? VOICE_MODES.IDLE;
+  const modeStyle = VOICE_STYLE[mode] ?? VOICE_STYLE.idle;
+
+  if (mode !== VOICE_MODES.SPEAKING) {
+    root.style.transform = "scale(1)";
+    root.style.filter = "none";
+    glow.style.opacity = String(modeStyle.baseGlow);
+    glow.style.filter = "blur(34px)";
+    core.style.filter = `brightness(${modeStyle.heartBrightness})`;
+    core.style.transform = "translate3d(0,0,0)";
+    network.style.animationDuration = "";
+    return;
+  }
+
+  const level = clamp01(appState.audioReactiveLevel);
+  const eased = level * level * (3 - 2 * level);
+
+  const scale = 1 + eased * 0.028;
+  const glowOpacity = modeStyle.baseGlow + eased * 0.22;
+  const glowBlur = 34 + eased * 10;
+  const glowSpread = 34 + eased * 12;
+  const glowAlpha = 0.26 + eased * 0.15;
+  const brightness = modeStyle.heartBrightness + eased * 0.2;
+  const driftY = -(eased * 1.5);
+  const breathDuration = Math.max(0.38, 0.62 - eased * 0.2);
+
+  root.style.transform = `scale(${scale.toFixed(4)})`;
+  root.style.filter = `drop-shadow(0 0 ${(18 + eased * 20).toFixed(1)}px rgba(127,179,255,${(0.08 + eased * 0.13).toFixed(3)}))`;
+  glow.style.opacity = glowOpacity.toFixed(3);
+  glow.style.filter = `blur(${glowBlur.toFixed(1)}px)`;
+  glow.style.boxShadow = `0 0 120px ${glowSpread.toFixed(1)}px rgba(127,179,255,${glowAlpha.toFixed(3)})`;
+  core.style.filter = `brightness(${brightness.toFixed(3)})`;
+  core.style.transform = `translate3d(0,${driftY.toFixed(2)}px,0)`;
+  network.style.animationDuration = `${breathDuration.toFixed(3)}s`;
 }
 
 function renderSphereMarkup(voiceMode) {
@@ -288,10 +351,10 @@ function renderSphereMarkup(voiceMode) {
   const style = VOICE_STYLE[voiceMode] ?? VOICE_STYLE.idle;
 
   return `
-    <div data-action="sphere-click" aria-label="Hermes sphere" role="button" tabindex="0" style="position:relative;width:448px;height:448px;flex:0 0 auto;cursor:pointer;background:none;border:none;padding:0;display:block;outline:none;overflow:visible;animation:${style.edgeAnim};">
-      <div style="position:absolute;inset:-34px;border-radius:50%;box-shadow:0 0 120px 34px rgba(127,179,255,0.26);opacity:${style.baseGlow};filter:blur(34px);animation:${style.edgeAnim};"></div>
-      <svg viewBox="0 0 200 200" width="448" height="448" style="position:relative;filter:brightness(${style.heartBrightness});">
-        <g style="transform-origin:100px 100px;animation:${style.breatheAnim};">
+    <div data-action="sphere-click" data-sphere-root="true" aria-label="Hermes sphere" role="button" tabindex="0" style="position:relative;width:448px;height:448px;flex:0 0 auto;cursor:pointer;background:none;border:none;padding:0;display:block;outline:none;overflow:visible;animation:${style.edgeAnim};transition:transform 120ms linear,filter 150ms ease-out;">
+      <div data-sphere-glow="true" style="position:absolute;inset:-34px;border-radius:50%;box-shadow:0 0 120px 34px rgba(127,179,255,0.26);opacity:${style.baseGlow};filter:blur(34px);animation:${style.edgeAnim};transition:opacity 120ms linear,filter 120ms linear,box-shadow 140ms linear;"></div>
+      <svg data-sphere-core="true" viewBox="0 0 200 200" width="448" height="448" style="position:relative;filter:brightness(${style.heartBrightness});transition:filter 120ms linear,transform 120ms linear;">
+        <g data-sphere-network="true" style="transform-origin:100px 100px;animation:${style.breatheAnim};">
           ${sphere.edges
             .map(({ i, j }) => {
               const a = sphere.points[i];
@@ -407,6 +470,7 @@ function render() {
   `;
 
   bindEvents();
+  applySphereReactiveStyle();
 }
 
 function bindEvents() {
@@ -433,6 +497,7 @@ function bindEvents() {
           await runVoiceInteraction(appState.queryDraft || "Give me a brief status update.");
         } else {
           appState.voiceProvider?.stop?.();
+          setAudioReactiveLevel(0);
           voiceController.idle();
         }
       }

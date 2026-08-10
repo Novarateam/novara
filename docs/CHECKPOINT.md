@@ -4,7 +4,20 @@ DATE:
 2026-08-10
 
 CURRENT STATE:
-The Hermes conversational voice implementation is now working end-to-end and frozen for this checkpoint. The Hermes Command Interface uses typed user input, real Hermes reasoning from the backend, and real ElevenLabs voice playback through the server voice route while preserving the existing interface design and real-data-only rules.
+- Hermes Command Interface complete for current phase
+- Real Hermes reasoning
+- Real ElevenLabs voice
+- Configurable ElevenLabs voice ID
+- Typed conversational interaction
+- THINKING state
+- SPEAKING state
+- IDLE state
+- Real audio-reactive Hermes sphere
+- Web Audio analyser driving sphere amplitude
+- Sphere returns cleanly to idle after playback
+- Real-data-only company metrics
+- No fabricated business numbers
+- Microphone/STT not implemented
 
 COMPLETED:
 - Hermes-first Command Interface implemented
@@ -26,14 +39,14 @@ CURRENT VOICE STATE:
 Voice is connected through the existing provider abstraction to backend ElevenLabs synthesis.
 The active flow is: typed message -> Hermes reasoning -> voice playback -> idle.
 
-NEXT SESSION:
-1. Configure the final Hermes ElevenLabs voice.
-2. Add microphone/STT when microphone hardware is available.
-3. Add LISTENING state.
-4. Complete: USER SPEAKS -> LISTENING -> THINKING -> SPEAKING -> IDLE.
-5. Make the sphere react to actual ElevenLabs audio amplitude.
-6. Then move into Novara memory / Obsidian integration.
-7. Detailed dashboards later.
+NEXT PHASE:
+1. Microphone input
+2. Speech-to-text
+3. LISTENING state
+4. Complete voice loop: You speak -> Listening -> Thinking -> Hermes speaks -> Idle
+5. Then Novara memory architecture / Obsidian integration
+6. Then agent orchestration and earned autonomy
+7. Detailed dashboards later
 
 IMPORTANT DESIGN DECISIONS:
 - The Hermes Command Interface prototype is the visual source of truth.

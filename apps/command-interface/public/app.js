@@ -1,4 +1,4 @@
-import { createVoiceController, createNoopVoiceProvider } from "./modules/voice-provider.js";
+import { createNoopVoiceProvider, createServerVoiceProvider, createVoiceController } from "./modules/voice-provider.js";
 import { VOICE_MODES, createVoiceState } from "./modules/voice-state.js";
 
 const PROTOTYPE_COLORS = {
@@ -52,8 +52,11 @@ const VOICE_STYLE = {
 const appState = {
   snapshot: null,
   voice: createVoiceState(),
+  voiceProvider: null,
   sphere: null,
   voiceSequenceTimer: null,
+  voiceBusy: false,
+  queryDraft: "",
 };
 
 const voiceController = createVoiceController({
@@ -63,7 +66,12 @@ const voiceController = createVoiceController({
   },
 });
 
-voiceController.attachProvider(createNoopVoiceProvider());
+function setVoiceProvider(provider) {
+  appState.voiceProvider = provider;
+  voiceController.attachProvider(provider);
+}
+
+setVoiceProvider(createServerVoiceProvider());
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -220,31 +228,58 @@ function generateSphere() {
   return appState.sphere;
 }
 
-function voiceSequence(mode) {
-  clearTimeout(appState.voiceSequenceTimer);
+async function requestHermesAnswer(question) {
+  const response = await fetch("/api/hermes/ask", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ question }),
+  });
 
-  if (mode === VOICE_MODES.IDLE) {
-    voiceController.idle();
-    voiceController.setTranscript("");
+  if (!response.ok) {
+    throw new Error("Hermes request failed");
+  }
+
+  const payload = await response.json();
+  return String(payload?.answer ?? "Hermes could not provide a response.");
+}
+
+async function runVoiceInteraction(question) {
+  if (appState.voiceBusy) {
     return;
   }
 
-  if (mode === VOICE_MODES.LISTENING) {
-    voiceController.listening();
-    voiceController.setTranscript("");
-    appState.voiceSequenceTimer = setTimeout(() => voiceSequence(VOICE_MODES.THINKING), 700);
+  const prompt = String(question ?? "").trim();
+  if (!prompt) {
+    voiceController.setTranscript("Please type a message for Hermes.");
     return;
   }
 
-  if (mode === VOICE_MODES.THINKING) {
+  appState.voiceBusy = true;
+
+  try {
     voiceController.thinking();
-    appState.voiceSequenceTimer = setTimeout(() => voiceSequence(VOICE_MODES.SPEAKING), 800);
-    return;
-  }
+    voiceController.setTranscript("Thinking...");
 
-  if (mode === VOICE_MODES.SPEAKING) {
+    let answer = "";
+    try {
+      answer = await requestHermesAnswer(prompt);
+    } catch {
+      voiceController.setTranscript("Hermes error: unable to process request.");
+      return;
+    }
+
+    voiceController.setTranscript(answer);
     voiceController.speaking(1);
-    appState.voiceSequenceTimer = setTimeout(() => voiceSequence(VOICE_MODES.IDLE), 1800);
+
+    const provider = appState.voiceProvider ?? createNoopVoiceProvider();
+    try {
+      await provider.speak(answer);
+    } catch {
+      voiceController.setTranscript("Voice error: unable to play audio.");
+    }
+  } finally {
+    appState.voiceBusy = false;
+    voiceController.idle();
   }
 }
 
@@ -348,6 +383,8 @@ function render() {
         <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;min-width:0;min-height:0;">
           <div style="height:18px;flex:0 0 auto;"></div>
           ${renderSphereMarkup(voiceMode)}
+          <div style="width:100%;max-width:630px;text-align:center;font-size:20px;color:${PROTOTYPE_COLORS.textPrimary};line-height:1.4;min-height:30px;">${escapeHtml(appState.voice?.transcript ?? "")}</div>
+          <input value="${escapeHtml(appState.queryDraft)}" placeholder="Type a message to Hermes" style="width:100%;max-width:540px;background:transparent;border:none;border-bottom:1px solid ${PROTOTYPE_COLORS.borderSubtle};padding:9px 6px;color:${PROTOTYPE_COLORS.textSecondary};font-size:19px;font-family:'Inter',sans-serif;outline:none;text-align:center;" data-input="hermes-draft" ${appState.voiceBusy ? "disabled" : ""} />
         </div>
 
         <div style="border:1px solid ${PROTOTYPE_COLORS.borderSubtle};border-radius:16px;padding:24px 27px;background:${PROTOTYPE_COLORS.bgPanel};display:flex;flex-direction:column;gap:18px;transition:border-color .5s ease;height:fit-content;">
@@ -373,15 +410,30 @@ function render() {
 }
 
 function bindEvents() {
+  const draftInput = document.querySelector('[data-input="hermes-draft"]');
+  if (draftInput) {
+    draftInput.addEventListener("input", (event) => {
+      appState.queryDraft = event.target?.value ?? "";
+    });
+
+    draftInput.addEventListener("keydown", async (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        await runVoiceInteraction(appState.queryDraft);
+      }
+    });
+  }
+
   document.querySelectorAll("[data-action]").forEach((node) => {
-    node.addEventListener("click", () => {
+    node.addEventListener("click", async () => {
       const action = node.getAttribute("data-action");
       if (action === "sphere-click") {
         const current = appState.voice?.mode ?? VOICE_MODES.IDLE;
         if (current === VOICE_MODES.IDLE) {
-          voiceSequence(VOICE_MODES.LISTENING);
+          await runVoiceInteraction(appState.queryDraft || "Give me a brief status update.");
         } else {
-          voiceSequence(VOICE_MODES.IDLE);
+          appState.voiceProvider?.stop?.();
+          voiceController.idle();
         }
       }
     });

@@ -4,34 +4,36 @@ DATE:
 2026-08-10
 
 CURRENT STATE:
-The Hermes-first Command Interface is implemented and stable. The home screen now uses the organic central Hermes network sphere, the old circular organization UI has been removed, and the interface follows the real-data-only rule for all displayed operational values.
+The Hermes conversational voice implementation is now working end-to-end and frozen for this checkpoint. The Hermes Command Interface uses typed user input, real Hermes reasoning from the backend, and real ElevenLabs voice playback through the server voice route while preserving the existing interface design and real-data-only rules.
 
 COMPLETED:
 - Hermes-first Command Interface implemented
-- Central organic network sphere implemented
-- Company Pulse implemented with real-data-only behavior
-- No-data states used where runtime data is unavailable
-- Attention / Currently / Next use runtime state
-- Active Agents use actual registered agents
-- Old circular organization UI removed from home
-- Voice abstraction remains ready for future ElevenLabs integration
-- ElevenLabs is NOT connected yet
-- Detailed dashboards are NOT built yet
-- Organization / Agents view remains a future phase
+- Real Hermes reasoning through /api/hermes/ask
+- Real ElevenLabs voice through /api/voice/speak
+- Typed user interaction
+- Hermes THINKING state
+- Hermes SPEAKING state
+- Hermes IDLE state
+- Sphere speaking animation
+- Audio playback completion handling
+- Input re-enabled after playback
+- API key remains server-side
+- No fabricated company metrics
+- Monthly goals remain No data when not configured
+- Microphone/STT is NOT implemented yet
 
 CURRENT VOICE STATE:
-Voice interaction is NOT yet connected to ElevenLabs.
-The provider abstraction exists and should remain modular.
+Voice is connected through the existing provider abstraction to backend ElevenLabs synthesis.
+The active flow is: typed message -> Hermes reasoning -> voice playback -> idle.
 
 NEXT SESSION:
-1. Connect ElevenLabs.
-2. Connect microphone input.
-3. Implement listening state.
-4. Implement thinking state.
-5. Implement speaking state.
-6. Make the central sphere react to Hermes' actual voice/audio.
-7. Then begin building the deeper Novara memory/Obsidian architecture.
-8. Dashboards later.
+1. Configure the final Hermes ElevenLabs voice.
+2. Add microphone/STT when microphone hardware is available.
+3. Add LISTENING state.
+4. Complete: USER SPEAKS -> LISTENING -> THINKING -> SPEAKING -> IDLE.
+5. Make the sphere react to actual ElevenLabs audio amplitude.
+6. Then move into Novara memory / Obsidian integration.
+7. Detailed dashboards later.
 
 IMPORTANT DESIGN DECISIONS:
 - The Hermes Command Interface prototype is the visual source of truth.
@@ -45,17 +47,21 @@ IMPORTANT DESIGN DECISIONS:
 - Do not expose API keys in frontend code.
 - Novara must never fabricate business metrics.
 - If real data is unavailable, show "No data" or "Not connected" instead of invented values.
+- Do not add microphone/STT until the hardware phase.
 
 IMPORTANT:
 Record the exact files changed in this session and any relevant architectural notes.
 
 FILES CHANGED IN THIS SESSION:
 - [apps/command-interface/public/app.js](../apps/command-interface/public/app.js)
+- [apps/command-interface/public/modules/voice-provider.js](../apps/command-interface/public/modules/voice-provider.js)
 - [apps/command-interface/src/server.ts](../apps/command-interface/src/server.ts)
+- [.gitignore](../.gitignore)
 - [docs/CHECKPOINT.md](./CHECKPOINT.md)
 
 ARCHITECTURAL NOTES:
 - The command interface stays on the existing Novara backend/data layer.
 - Voice remains provider-agnostic through the current abstraction seam.
-- The old organization view concepts are reserved for a future dedicated view, not the home screen.
-- The live UI now displays runtime values only and uses explicit no-data states when the runtime does not provide a value.
+- ElevenLabs API key usage is server-side only in the voice route.
+- Typed Hermes interactions now drive the voice lifecycle (THINKING -> SPEAKING -> IDLE).
+- The live UI displays runtime values only and uses explicit no-data states when runtime values are missing.

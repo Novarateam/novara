@@ -48,3 +48,62 @@ export function createNoopVoiceProvider() {
     async stop() {},
   };
 }
+
+export function createServerVoiceProvider() {
+  let activeAudio = null;
+
+  const stopAudio = () => {
+    if (!activeAudio) {
+      return;
+    }
+    activeAudio.pause();
+    activeAudio.currentTime = 0;
+    activeAudio.src = "";
+    activeAudio = null;
+  };
+
+  return {
+    name: "server-elevenlabs",
+    async startListening() {},
+    async stopListening() {},
+    async speak(text) {
+      const line = String(text ?? "").trim();
+      if (!line) {
+        return;
+      }
+
+      const response = await fetch("/api/voice/speak", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: line }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Voice synthesis unavailable");
+      }
+
+      const audioBlob = await response.blob();
+      const audioUrl = URL.createObjectURL(audioBlob);
+      stopAudio();
+
+      const audio = new Audio(audioUrl);
+      activeAudio = audio;
+
+      try {
+        await audio.play();
+        await new Promise((resolve, reject) => {
+          audio.onended = () => resolve(undefined);
+          audio.onerror = () => reject(new Error("Audio playback failed"));
+        });
+      } finally {
+        URL.revokeObjectURL(audioUrl);
+        if (activeAudio === audio) {
+          activeAudio = null;
+        }
+      }
+    },
+    async stop() {
+      stopAudio();
+    },
+  };
+}

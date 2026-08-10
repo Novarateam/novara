@@ -24,11 +24,41 @@ type StrategicDecision = {
 };
 
 const repoRoot = path.resolve(process.cwd());
+const envPath = path.resolve(repoRoot, ".env");
 const publicRoot = path.resolve(repoRoot, "apps/command-interface/public");
 const vaultRoot = path.resolve(repoRoot, "Novara");
 const metricoolNotePath = path.resolve(vaultRoot, "Integrations/Metricool.md");
 const strategicDecisionPath = path.resolve(vaultRoot, "Strategy/Strategic Decisions.md");
 const currentObjectivesPath = path.resolve(vaultRoot, "Strategy/Current Objectives.md");
+
+async function loadEnvFile(filePath: string): Promise<void> {
+  const raw = await readIfExists(filePath);
+  if (!raw) {
+    return;
+  }
+
+  for (const line of raw.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) {
+      continue;
+    }
+
+    const separatorIndex = trimmed.indexOf("=");
+    if (separatorIndex <= 0) {
+      continue;
+    }
+
+    const key = trimmed.slice(0, separatorIndex).trim();
+    let value = trimmed.slice(separatorIndex + 1).trim();
+    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+      value = value.slice(1, -1);
+    }
+
+    if (!(key in process.env)) {
+      process.env[key] = value;
+    }
+  }
+}
 
 async function readIfExists(filePath: string): Promise<string> {
   try {
@@ -237,6 +267,65 @@ function respondText(res: any, statusCode: number, text: string, contentType = "
   res.end(text);
 }
 
+async function readJsonBody(req: any, maxBytes = 32 * 1024): Promise<any> {
+  const chunks: Buffer[] = [];
+  let total = 0;
+
+  for await (const chunk of req) {
+    const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    total += buf.length;
+    if (total > maxBytes) {
+      throw new Error("Payload too large");
+    }
+    chunks.push(buf);
+  }
+
+  const raw = Buffer.concat(chunks).toString("utf8").trim();
+  if (!raw) {
+    return {};
+  }
+
+  return JSON.parse(raw);
+}
+
+function hasElevenLabsKey(): boolean {
+  return Boolean(process.env.ELEVENLABS_API_KEY?.trim());
+}
+
+async function synthesizeWithElevenLabs(text: string): Promise<Buffer> {
+  const apiKey = process.env.ELEVENLABS_API_KEY?.trim();
+  if (!apiKey) {
+    throw new Error("VOICE_NOT_CONNECTED");
+  }
+
+  const voiceId = process.env.ELEVENLABS_VOICE_ID?.trim() || "EXAVITQu4vr4xnSDxMaL";
+  const modelId = process.env.ELEVENLABS_MODEL_ID?.trim() || "eleven_multilingual_v2";
+
+  const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}/stream`, {
+    method: "POST",
+    headers: {
+      "xi-api-key": apiKey,
+      Accept: "audio/mpeg",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      text,
+      model_id: modelId,
+      voice_settings: {
+        stability: 0.35,
+        similarity_boost: 0.7,
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error("VOICE_UPSTREAM_ERROR");
+  }
+
+  const audio = await response.arrayBuffer();
+  return Buffer.from(audio);
+}
+
 async function serveStatic(res: any, pathname: string) {
   const safePath = pathname === "/" ? "/index.html" : pathname;
   const fullPath = path.resolve(publicRoot, `.${safePath}`);
@@ -315,8 +404,50 @@ function buildHermesReply(question: string, snapshot: Awaited<ReturnType<typeof 
   };
 }
 
+await loadEnvFile(envPath);
+
 const server = createServer(async (req, res) => {
   const url = new URL(req.url ?? "/", "http://localhost");
+
+  if (url.pathname === "/api/voice/status") {
+    respondJson(res, 200, {
+      provider: "elevenlabs",
+      connected: hasElevenLabsKey(),
+    });
+    return;
+  }
+
+  if (url.pathname === "/api/voice/speak") {
+    if (req.method !== "POST") {
+      respondJson(res, 405, { error: "Method not allowed" });
+      return;
+    }
+
+    try {
+      const body = await readJsonBody(req);
+      const text = String(body?.text ?? "").trim();
+      if (!text) {
+        respondJson(res, 400, { error: "Missing text" });
+        return;
+      }
+
+      if (!hasElevenLabsKey()) {
+        respondJson(res, 503, { error: "Voice provider not connected" });
+        return;
+      }
+
+      const audio = await synthesizeWithElevenLabs(text.slice(0, 1200));
+      res.writeHead(200, {
+        "Content-Type": "audio/mpeg",
+        "Cache-Control": "no-store",
+        "Content-Length": String(audio.length),
+      });
+      res.end(audio);
+    } catch {
+      respondJson(res, 502, { error: "Voice synthesis failed" });
+    }
+    return;
+  }
 
   if (url.pathname === "/api/command-interface") {
     try {
@@ -330,7 +461,22 @@ const server = createServer(async (req, res) => {
   if (url.pathname === "/api/hermes/ask") {
     try {
       const snapshot = await getSnapshot();
-      const question = url.searchParams.get("q") ?? "";
+      let question = "";
+
+      if (req.method === "POST") {
+        const body = await readJsonBody(req);
+        question = String(body?.question ?? "").trim();
+        if (!question) {
+          respondJson(res, 400, { error: "Missing question" });
+          return;
+        }
+      } else if (req.method === "GET") {
+        question = String(url.searchParams.get("q") ?? "").trim();
+      } else {
+        respondJson(res, 405, { error: "Method not allowed" });
+        return;
+      }
+
       respondJson(res, 200, {
         question,
         ...buildHermesReply(question, snapshot),

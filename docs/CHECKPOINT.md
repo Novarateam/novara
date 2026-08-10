@@ -5,11 +5,13 @@ DATE:
 
 CURRENT:
 - durable Agent Runtime
-- Hermes -> Task -> Agent orchestration
-- generic agent-to-agent sendMessage()
-- persisted MessageEnvelope
-- audit events
-- A-001 -> A-002 delegation now uses generic messaging
+- Hermes task orchestration
+- generic agent communication
+- scoped runtime memory
+- task/agent/department/company/Novara memory scopes
+- persisted memory-scope bindings
+- audit trail
+- Obsidian remains read-only reference memory
 
 COMPLETED:
 - Hermes-first Command Interface implemented
@@ -32,9 +34,10 @@ Voice is connected through the existing provider abstraction to backend ElevenLa
 The active flow is: typed message -> Hermes reasoning -> voice playback -> idle.
 
 NEXT:
-1. design/implement layered memory
-2. then Finance/Accountant capability
-3. then departments and additional agents
+1. Finance/Accountant capability
+2. permission/risk controls
+3. departments and specialist agents
+4. broader memory/learning later
 
 IMPORTANT DESIGN DECISIONS:
 - The Hermes Command Interface prototype is the visual source of truth.

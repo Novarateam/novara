@@ -172,6 +172,13 @@ export interface MemoryScope {
   updatedAt: string;
 }
 
+export interface MemoryScopeBinding {
+  id: string;
+  memoryEntryId: string;
+  scopeId: string;
+  createdAt: string;
+}
+
 export interface PermissionPolicy {
   id: string;
   subjectType: "agent" | "department";
@@ -238,6 +245,7 @@ export interface EscalationResponse {
 
 export interface StoreMemoryRequest {
   entry: CompanyMemoryEntry;
+  scopeIds?: string[];
 }
 
 export interface StoreMemoryResponse {
@@ -251,6 +259,7 @@ export interface RuntimeSnapshot {
   messages: MessageEnvelope[];
   memory: CompanyMemoryEntry[];
   memoryScopes: MemoryScope[];
+  memoryScopeBindings: MemoryScopeBinding[];
   permissionPolicies: PermissionPolicy[];
   companyState: CompanyState;
   updatedAt: string;

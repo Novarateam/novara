@@ -19,6 +19,7 @@ import type {
   CompanyState,
   DirectorDecisionResponse,
   EscalationResponse,
+  MemoryScope,
   MessageEnvelope,
   PermissionPolicy,
   SpecialistExecutionResponse,
@@ -69,21 +70,81 @@ export class AgentRuntime {
   }
 
   private ensureBaseMemoryScopes(): void {
+    this.ensureMemoryScope("scope-novara", "novara", "novara");
+    this.ensureMemoryScope("scope-company", "company", "company");
+  }
+
+  private ensureMemoryScope(id: string, type: MemoryScope["type"], targetId: string): MemoryScope {
+    const existing = this.repository.getSnapshot().memoryScopes.find((scope) => scope.id === id);
     const timestamp = createTimestamp();
-    this.repository.upsertMemoryScope({
-      id: "scope-novara",
-      type: "novara",
-      targetId: "novara",
-      createdAt: timestamp,
+    return this.repository.upsertMemoryScope({
+      id,
+      type,
+      targetId,
+      createdAt: existing?.createdAt ?? timestamp,
       updatedAt: timestamp,
     });
-    this.repository.upsertMemoryScope({
-      id: "scope-company",
-      type: "company",
-      targetId: "company",
-      createdAt: timestamp,
-      updatedAt: timestamp,
-    });
+  }
+
+  private ensureAgentScope(agentId: string): string {
+    const scopeId = `scope-agent-${agentId}`;
+    this.ensureMemoryScope(scopeId, "agent", agentId);
+    return scopeId;
+  }
+
+  private ensureTaskScope(taskId: string): string {
+    const scopeId = `scope-task-${taskId}`;
+    this.ensureMemoryScope(scopeId, "task", taskId);
+    return scopeId;
+  }
+
+  private ensureDepartmentScope(departmentId: string): string {
+    const scopeId = `scope-department-${departmentId}`;
+    this.ensureMemoryScope(scopeId, "department", departmentId);
+    return scopeId;
+  }
+
+  private associateMemoryEntryWithScopes(memoryEntryId: string, scopeIds: string[]): void {
+    const existingBindings = this.repository.listMemoryScopeBindingsForEntry(memoryEntryId);
+    const uniqueScopeIds = scopeIds.filter((scopeId, index, list) => Boolean(scopeId) && list.indexOf(scopeId) === index);
+
+    for (const scopeId of uniqueScopeIds) {
+      if (existingBindings.some((binding) => binding.scopeId === scopeId)) {
+        continue;
+      }
+
+      this.repository.upsertMemoryScopeBinding({
+        id: createStableId("memscope"),
+        memoryEntryId,
+        scopeId,
+        createdAt: createTimestamp(),
+      });
+    }
+  }
+
+  private persistMemoryEntry(entry: CompanyMemoryEntry, scopeIds: string[]): CompanyMemoryEntry {
+    this.memory.add(entry);
+    this.repository.upsertMemory(entry);
+    this.associateMemoryEntryWithScopes(entry.id, scopeIds);
+    return entry;
+  }
+
+  private buildRelevantScopeIds(agentId: string, taskId?: string): string[] {
+    const profile = this.getPersistedAgentProfile(agentId);
+    const scopeIds: string[] = [];
+
+    if (taskId) {
+      scopeIds.push(this.ensureTaskScope(taskId));
+    }
+
+    scopeIds.push(this.ensureAgentScope(agentId));
+
+    if (profile?.departmentId) {
+      scopeIds.push(this.ensureDepartmentScope(profile.departmentId));
+    }
+
+    scopeIds.push("scope-company", "scope-novara");
+    return scopeIds.filter((scopeId, index, list) => list.indexOf(scopeId) === index);
   }
 
   private appendAudit(actorId: string, type: string, message: string, payload?: Record<string, unknown>, taskId?: string): void {
@@ -103,6 +164,7 @@ export class AgentRuntime {
   private buildAgentProfile(definition: AgentDefinition): AgentProfile {
     const existing = this.getPersistedAgentProfile(definition.id);
     const timestamp = createTimestamp();
+    const agentScopeId = this.ensureAgentScope(definition.id);
     return {
       id: definition.id,
       name: definition.name,
@@ -111,7 +173,7 @@ export class AgentRuntime {
       mission: definition.mission,
       departmentId: existing?.departmentId ?? null,
       toolIds: existing?.toolIds ?? [],
-      memoryScopeIds: existing?.memoryScopeIds ?? ["scope-company"],
+      memoryScopeIds: existing?.memoryScopeIds ?? [agentScopeId, "scope-company"],
       metrics: existing?.metrics ?? {},
       workload: existing?.workload ?? {
         activeTaskIds: [],
@@ -323,6 +385,7 @@ export class AgentRuntime {
     }
 
     this.agents.set(definition.id, new Agent(definition));
+    this.ensureAgentScope(definition.id);
     this.repository.upsertAgent(this.buildAgentProfile(definition));
     this.upsertDefaultPermissionPolicy(definition);
     this.appendAudit(definition.id, "agent.registered", `Registered agent ${definition.id}`, {
@@ -332,15 +395,15 @@ export class AgentRuntime {
     });
   }
 
-  private buildContext(): AgentExecutionContext {
+  private buildContext(agentId: string, taskId?: string): AgentExecutionContext {
     return {
-      memory: this.memory.list(),
+      memory: this.repository.listMemoryByScopeHierarchy(this.buildRelevantScopeIds(agentId, taskId)),
       state: this.state.getState(),
     };
   }
 
-  private buildContextualTask(task: AgentTask): AgentTask {
-    const context = this.buildContext();
+  private buildContextualTask(agentId: string, task: AgentTask): AgentTask {
+    const context = this.buildContext(agentId, task.id);
     return {
       ...task,
       input:
@@ -392,8 +455,7 @@ export class AgentRuntime {
         status: recommendationStatus,
       };
 
-      this.memory.add(evidenceEntry);
-      this.repository.upsertMemory(evidenceEntry);
+      this.persistMemoryEntry(evidenceEntry, [this.ensureTaskScope(task.id), "scope-company"]);
       this.appendAudit(agentId, "memory.evidence_recorded", "Recorded specialist evidence entry.", {
         memoryId: evidenceEntry.id,
         status: evidenceEntry.status,
@@ -453,7 +515,8 @@ export class AgentRuntime {
       objective: safeTask.objective,
     }, safeTask.id);
 
-    const contextualTask = this.buildContextualTask(safeTask);
+    this.ensureTaskScope(safeTask.id);
+    const contextualTask = this.buildContextualTask(agentId, safeTask);
     this.updateTaskRecord(agentId, safeTask, "running");
     this.markAgentTaskRunning(agentId, safeTask.id);
     this.appendAudit(agentId, "task.started", "Started task execution.", {
@@ -532,7 +595,7 @@ export class AgentRuntime {
               ...(typeof delegatedTask.input === "object" && delegatedTask.input !== null
                 ? (delegatedTask.input as Record<string, unknown>)
                 : {}),
-              context: this.buildContext(),
+              context: this.buildContext("A-002", delegatedTask.id),
             },
           }, { autoDelegate: false });
 
@@ -670,8 +733,8 @@ export class AgentRuntime {
           : createTimestamp(),
     };
 
-    this.memory.add(entry);
-    this.repository.upsertMemory(entry);
+    const scopeIds = request.scopeIds?.length ? request.scopeIds : ["scope-company"];
+    this.persistMemoryEntry(entry, scopeIds);
     this.appendAudit("system", "memory.stored", "Stored memory entry.", {
       memoryId: entry.id,
       type: entry.type,

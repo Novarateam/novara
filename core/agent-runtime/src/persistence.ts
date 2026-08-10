@@ -7,6 +7,7 @@ import type {
   CompanyMemoryEntry,
   CompanyState,
   Department,
+  MemoryScopeBinding,
   MemoryScope,
   MessageEnvelope,
   PermissionPolicy,
@@ -42,6 +43,7 @@ function emptySnapshot(): RuntimeSnapshot {
     messages: [],
     memory: [],
     memoryScopes: [],
+    memoryScopeBindings: [],
     permissionPolicies: [],
     companyState: { ...DEFAULT_COMPANY_STATE },
     updatedAt: nowIso(),
@@ -68,6 +70,7 @@ function fromDocument(doc: Partial<RuntimeStoreDocument> | undefined): RuntimeSn
     messages: Array.isArray(doc.messages) ? doc.messages : base.messages,
     memory: Array.isArray(doc.memory) ? doc.memory : base.memory,
     memoryScopes: Array.isArray(doc.memoryScopes) ? doc.memoryScopes : base.memoryScopes,
+    memoryScopeBindings: Array.isArray(doc.memoryScopeBindings) ? doc.memoryScopeBindings : base.memoryScopeBindings,
     permissionPolicies: Array.isArray(doc.permissionPolicies) ? doc.permissionPolicies : base.permissionPolicies,
     companyState:
       doc.companyState && typeof doc.companyState === "object"
@@ -193,6 +196,7 @@ export class RuntimeRepository {
       messages: [...this.snapshot.messages],
       memory: [...this.snapshot.memory],
       memoryScopes: [...this.snapshot.memoryScopes],
+      memoryScopeBindings: [...this.snapshot.memoryScopeBindings],
       permissionPolicies: [...this.snapshot.permissionPolicies],
       companyState: {
         objectives: [...this.snapshot.companyState.objectives],
@@ -253,6 +257,59 @@ export class RuntimeRepository {
       memoryScopes: upsertById(this.snapshot.memoryScopes, scope),
     });
     return scope;
+  }
+
+  upsertMemoryScopeBinding(binding: MemoryScopeBinding): MemoryScopeBinding {
+    this.snapshot = this.persist({
+      ...this.snapshot,
+      memoryScopeBindings: upsertById(this.snapshot.memoryScopeBindings, binding),
+    });
+    return binding;
+  }
+
+  listMemoryScopeBindingsForEntry(memoryEntryId: string): MemoryScopeBinding[] {
+    return this.snapshot.memoryScopeBindings.filter((binding) => binding.memoryEntryId === memoryEntryId);
+  }
+
+  listMemoryByScopeHierarchy(scopeIds: string[]): CompanyMemoryEntry[] {
+    const requestedScopeIds = scopeIds.filter((scopeId, index, list) => Boolean(scopeId) && list.indexOf(scopeId) === index);
+    const scopeRank = new Map(requestedScopeIds.map((scopeId, index) => [scopeId, index]));
+
+    const candidates = this.snapshot.memory
+      .map((entry) => {
+        const bindings = this.listMemoryScopeBindingsForEntry(entry.id);
+        const effectiveScopeIds = bindings.length > 0 ? bindings.map((binding) => binding.scopeId) : ["scope-company"];
+        const matchingRanks = effectiveScopeIds
+          .map((scopeId) => scopeRank.get(scopeId))
+          .filter((rank): rank is number => rank !== undefined);
+
+        if (matchingRanks.length === 0) {
+          return null;
+        }
+
+        const bestScopeRank = Math.min(...matchingRanks);
+        const statusRank = entry.status === "verified" ? 0 : entry.status === "proposed" ? 1 : 2;
+        const timestamp = Date.parse(entry.timestamp);
+
+        return {
+          entry,
+          bestScopeRank,
+          statusRank,
+          timestamp: Number.isNaN(timestamp) ? 0 : timestamp,
+        };
+      })
+      .filter((candidate): candidate is { entry: CompanyMemoryEntry; bestScopeRank: number; statusRank: number; timestamp: number } => candidate !== null)
+      .sort((left, right) => {
+        if (left.bestScopeRank !== right.bestScopeRank) {
+          return left.bestScopeRank - right.bestScopeRank;
+        }
+        if (left.statusRank !== right.statusRank) {
+          return left.statusRank - right.statusRank;
+        }
+        return right.timestamp - left.timestamp;
+      });
+
+    return candidates.map((candidate) => candidate.entry);
   }
 
   upsertPermissionPolicy(policy: PermissionPolicy): PermissionPolicy {

@@ -1,6 +1,7 @@
 import type { CompanyState } from "./types.ts";
 
 export class CompanyStateStore {
+  private readonly onChange?: (state: CompanyState) => void;
   private state: CompanyState = {
     objectives: [],
     priorities: [],
@@ -10,6 +11,21 @@ export class CompanyStateStore {
     pendingDecisions: [],
     lastUpdated: new Date().toISOString(),
   };
+
+  constructor(initialState?: CompanyState, onChange?: (state: CompanyState) => void) {
+    this.onChange = onChange;
+    if (initialState) {
+      this.state = {
+        objectives: [...initialState.objectives],
+        priorities: [...initialState.priorities],
+        activeWork: [...initialState.activeWork],
+        opportunities: [...initialState.opportunities],
+        risks: [...initialState.risks],
+        pendingDecisions: [...initialState.pendingDecisions],
+        lastUpdated: initialState.lastUpdated,
+      };
+    }
+  }
 
   getState(): CompanyState {
     return {
@@ -35,6 +51,8 @@ export class CompanyStateStore {
     };
 
     this.state = nextState;
-    return this.getState();
+    const snapshot = this.getState();
+    this.onChange?.(snapshot);
+    return snapshot;
   }
 }

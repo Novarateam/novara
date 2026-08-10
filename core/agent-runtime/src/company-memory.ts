@@ -7,11 +7,21 @@ import type {
 
 export class CompanyMemory {
   private entries = new Map<string, CompanyMemoryEntry>();
+  private readonly onChange?: (entries: CompanyMemoryEntry[]) => void;
+
+  constructor(initialEntries: CompanyMemoryEntry[] = [], onChange?: (entries: CompanyMemoryEntry[]) => void) {
+    this.onChange = onChange;
+    for (const entry of initialEntries) {
+      this.entries.set(entry.id, { ...entry });
+    }
+  }
 
   add(entry: CompanyMemoryEntry): CompanyMemoryEntry {
     this.validate(entry);
     this.entries.set(entry.id, { ...entry });
-    return this.entries.get(entry.id)!;
+    const stored = this.entries.get(entry.id)!;
+    this.onChange?.(this.list());
+    return stored;
   }
 
   get(id: string): CompanyMemoryEntry | undefined {

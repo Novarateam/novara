@@ -254,6 +254,82 @@ async function getSnapshot() {
   };
 }
 
+async function getRuntimeContext() {
+  const metricoolMarkdown = await readIfExists(metricoolNotePath);
+  const strategicMarkdown = await readIfExists(strategicDecisionPath);
+  const objectiveMarkdown = await readIfExists(currentObjectivesPath);
+
+  const metricool = parseMetricoolEvidence(metricoolMarkdown);
+  const strategicDecision = parseStrategicDecision(strategicMarkdown);
+  const objective =
+    parseBullets(objectiveMarkdown, "Current Strategic Focus")[0] ??
+    "Build a durable social attention engine for Novara.";
+
+  const runtime = buildRuntimeWithEvidence(metricool, objective);
+  const companyBrief = runtime.getCompanyBrief();
+  const agents = runtime.listAgents();
+  const vaultDocCount = await countVaultMarkdownFiles(vaultRoot);
+  const state = companyBrief.state;
+  const connectedNetworks = countConnectedNetworks(metricool.facts);
+  const commandInterface = {
+    companyPulse: {
+      revenue: null,
+      subscribers: null,
+      subscribersTrend: null,
+      clicks: null,
+      clicksTrend: null,
+      views: null,
+      viewsTrend: null,
+      channelsActive: connectedNetworks,
+      agentsActive: agents.length,
+    },
+    currentNext: {
+      currently: state.activeWork[0] ?? null,
+      next: state.pendingDecisions[0] ?? null,
+    },
+    monthlyGoal: {
+      label: "TURNOVER",
+      current: null,
+      target: null,
+      remaining: null,
+      progress: null,
+      pace: null,
+      configured: false,
+    },
+    autonomy: {
+      status: "Operational",
+      level: "2",
+      percent: 42,
+    },
+    agentCount: agents.length,
+    agentNames: agents.map((agent) => agent.name ?? agent.id ?? "Agent"),
+  };
+
+  return {
+    runtime,
+    snapshot: {
+      generatedAt: new Date().toISOString(),
+      objective,
+      companyBrief,
+      agents,
+      metricool,
+      strategicDecision,
+      knowledge: {
+        vaultPath: vaultRoot,
+        markdownDocuments: vaultDocCount,
+      },
+      commandInterface,
+    },
+  };
+}
+
+function isOpportunityTaskQuestion(question: string): boolean {
+  const q = question.toLowerCase();
+  return ["opportunit", "research", "investigate", "evaluate", "evidence", "growth sprint"].some((token) =>
+    q.includes(token),
+  );
+}
+
 function respondJson(res: any, statusCode: number, body: unknown) {
   res.writeHead(statusCode, {
     "Content-Type": "application/json; charset=utf-8",
@@ -451,7 +527,8 @@ const server = createServer(async (req, res) => {
 
   if (url.pathname === "/api/command-interface") {
     try {
-      respondJson(res, 200, await getSnapshot());
+      const context = await getRuntimeContext();
+      respondJson(res, 200, context.snapshot);
     } catch (error) {
       respondJson(res, 500, { error: (error as Error).message });
     }
@@ -460,7 +537,8 @@ const server = createServer(async (req, res) => {
 
   if (url.pathname === "/api/hermes/ask") {
     try {
-      const snapshot = await getSnapshot();
+      const context = await getRuntimeContext();
+      const { runtime, snapshot } = context;
       let question = "";
 
       if (req.method === "POST") {
@@ -474,6 +552,40 @@ const server = createServer(async (req, res) => {
         question = String(url.searchParams.get("q") ?? "").trim();
       } else {
         respondJson(res, 405, { error: "Method not allowed" });
+        return;
+      }
+
+      if (question && isOpportunityTaskQuestion(question)) {
+        const specialist = runtime.executeSpecialist("A-002", {
+          id: `TASK-HERMES-${Date.now()}`,
+          objective: question,
+          input: {
+            source: "hermes-api",
+            type: "opportunity-research",
+          },
+        });
+
+        const output = specialist.result.output as
+          | {
+              message?: string;
+              structuredResult?: {
+                summary?: string;
+              };
+            }
+          | undefined;
+
+        const answer =
+          output?.structuredResult?.summary ??
+          output?.message ??
+          "Hermes routed the request to A-002, but no summary was returned.";
+
+        respondJson(res, 200, {
+          question,
+          answer,
+          taskId: specialist.taskId,
+          agentId: specialist.agentId,
+          taskStatus: specialist.result.status,
+        });
         return;
       }
 

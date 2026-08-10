@@ -25,10 +25,93 @@ export interface AgentDefinition {
   authority: AuthorityLevel;
 }
 
+export interface Department {
+  id: string;
+  name: string;
+  mission: string;
+  agentIds: string[];
+  goals: string[];
+  metrics: Record<string, number | string | null>;
+  memoryIds: string[];
+  budget: {
+    currency: string;
+    allocated: number;
+    spent: number;
+  };
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AgentProfile {
+  id: string;
+  name: string;
+  version: string;
+  status: AgentStatus;
+  mission: string;
+  departmentId: string | null;
+  toolIds: string[];
+  memoryScopeIds: string[];
+  metrics: Record<string, number | string | null>;
+  workload: {
+    activeTaskIds: string[];
+    queueDepth: number;
+  };
+  authority: AuthorityLevel;
+  limits: {
+    maxConcurrentTasks: number;
+    maxTaskCost: number | null;
+  };
+  performance: {
+    completedTasks: number;
+    failedTasks: number;
+    escalatedTasks: number;
+  };
+  cost: {
+    currency: string;
+    total: number;
+  };
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface AgentTask {
   id: string;
   objective: string;
   input?: unknown;
+}
+
+export type TaskPriority = "low" | "normal" | "high" | "critical";
+
+export type TaskStatus = "queued" | "running" | "completed" | "failed" | "escalated";
+
+export interface TaskRecord {
+  id: string;
+  objective: string;
+  assignedAgentId: string;
+  priority: TaskPriority;
+  status: TaskStatus;
+  input?: unknown;
+  result?: unknown;
+  error?: string;
+  cost: {
+    currency: string;
+    amount: number;
+  };
+  evidence: string[];
+  createdAt: string;
+  updatedAt: string;
+  startedAt?: string;
+  completedAt?: string;
+}
+
+export interface MessageEnvelope {
+  id: string;
+  senderAgentId: string;
+  recipientAgentId: string;
+  taskId: string;
+  priority: TaskPriority;
+  payload: unknown;
+  createdAt: string;
 }
 
 export interface AgentResult {
@@ -45,6 +128,16 @@ export interface PerformanceEvent {
   event: string;
   timestamp: string;
   metadata?: Record<string, unknown>;
+}
+
+export interface AuditEvent {
+  id: string;
+  timestamp: string;
+  actorId: string;
+  taskId?: string;
+  type: string;
+  message: string;
+  payload?: Record<string, unknown>;
 }
 
 export type CompanyMemoryType =
@@ -66,6 +159,27 @@ export interface CompanyMemoryEntry {
   confidence: number;
   authority: AuthorityLevel;
   status: CompanyMemoryStatus;
+}
+
+export type MemoryScopeType = "novara" | "company" | "department" | "agent" | "task";
+
+export interface MemoryScope {
+  id: string;
+  type: MemoryScopeType;
+  targetId: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PermissionPolicy {
+  id: string;
+  subjectType: "agent" | "department";
+  subjectId: string;
+  allowedAuthorities: AuthorityLevel[];
+  approvalRequiredFor: AuthorityLevel[];
+  riskLevel: "low" | "medium" | "high" | "critical";
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface CompanyState {
@@ -127,4 +241,16 @@ export interface StoreMemoryRequest {
 
 export interface StoreMemoryResponse {
   entry: CompanyMemoryEntry;
+}
+
+export interface RuntimeSnapshot {
+  agents: AgentProfile[];
+  departments: Department[];
+  tasks: TaskRecord[];
+  messages: MessageEnvelope[];
+  memory: CompanyMemoryEntry[];
+  memoryScopes: MemoryScope[];
+  permissionPolicies: PermissionPolicy[];
+  companyState: CompanyState;
+  updatedAt: string;
 }

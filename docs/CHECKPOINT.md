@@ -3,21 +3,15 @@
 DATE:
 2026-08-10
 
-CURRENT STATE:
-- Hermes Command Interface complete for current phase
-- Real Hermes reasoning
-- Real ElevenLabs voice
-- Configurable ElevenLabs voice ID
-- Typed conversational interaction
-- THINKING state
-- SPEAKING state
-- IDLE state
-- Real audio-reactive Hermes sphere
-- Web Audio analyser driving sphere amplitude
-- Sphere returns cleanly to idle after playback
-- Real-data-only company metrics
-- No fabricated business numbers
-- Microphone/STT not implemented
+CURRENT:
+- durable Agent Runtime foundation
+- canonical agent/task/department/message/memory/permission schemas
+- file-backed persistence
+- append-only audit log
+- Hermes can create and execute a real runtime task
+- Hermes can delegate an opportunity/research request to A-002
+- TaskRecord/result/audit evidence persists
+- existing Hermes fallback still works
 
 COMPLETED:
 - Hermes-first Command Interface implemented
@@ -39,14 +33,12 @@ CURRENT VOICE STATE:
 Voice is connected through the existing provider abstraction to backend ElevenLabs synthesis.
 The active flow is: typed message -> Hermes reasoning -> voice playback -> idle.
 
-NEXT PHASE:
-1. Microphone input
-2. Speech-to-text
-3. LISTENING state
-4. Complete voice loop: You speak -> Listening -> Thinking -> Hermes speaks -> Idle
-5. Then Novara memory architecture / Obsidian integration
-6. Then agent orchestration and earned autonomy
-7. Detailed dashboards later
+NEXT:
+1. general structured agent communication
+2. task routing beyond the current deterministic A-002 path
+3. layered memory
+4. permissions/risk/approval controls
+5. additional departments/agents later
 
 IMPORTANT DESIGN DECISIONS:
 - The Hermes Command Interface prototype is the visual source of truth.

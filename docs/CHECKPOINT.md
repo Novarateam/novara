@@ -4,42 +4,34 @@ DATE:
 2026-08-10
 
 CURRENT STATE:
-The Novara home Command Interface has been migrated from the old circular organization interface to the new Hermes-first Command Interface.
+The Hermes-first Command Interface is implemented and stable. The home screen now uses the organic central Hermes network sphere, the old circular organization UI has been removed, and the interface follows the real-data-only rule for all displayed operational values.
 
 COMPLETED:
-- New Hermes-first home layout
-- Central black-hole-style Hermes sphere
-- Company Pulse
-- Needs Your Attention
-- Currently / Next
-- Monthly Turnover Goal
-- Active Agents
-- System / Autonomy
-- Large negative space
-- Old circular organization UI removed from home screen
-- Old Director/Social/Knowledge/Memory/Decisions/Integrations/State home-screen nodes removed
-- Voice Interaction panel removed
-- "Hermes is ready..." text removed
-- "Large black-hole sphere..." descriptive text removed
-- Provider: noop removed from visible UI
-- Existing company-state/API data preserved
-- Voice-state abstraction preserved for future ElevenLabs integration
+- Hermes-first Command Interface implemented
+- Central organic network sphere implemented
+- Company Pulse implemented with real-data-only behavior
+- No-data states used where runtime data is unavailable
+- Attention / Currently / Next use runtime state
+- Active Agents use actual registered agents
+- Old circular organization UI removed from home
+- Voice abstraction remains ready for future ElevenLabs integration
+- ElevenLabs is NOT connected yet
+- Detailed dashboards are NOT built yet
+- Organization / Agents view remains a future phase
 
 CURRENT VOICE STATE:
 Voice interaction is NOT yet connected to ElevenLabs.
 The provider abstraction exists and should remain modular.
 
-NEXT STEPS:
-1. Connect real ElevenLabs voice.
-2. Add microphone input.
-3. Implement Hermes listening state.
-4. Implement Hermes thinking state.
-5. Implement Hermes speaking state.
-6. Make the central sphere react to actual Hermes audio.
-7. Test the full voice interaction loop.
-8. Later build detailed dashboards.
-9. Later build the Organization / Agents interface using the concepts from the old circular interface where appropriate.
-10. Later integrate Novara's Obsidian memory architecture.
+NEXT SESSION:
+1. Connect ElevenLabs.
+2. Connect microphone input.
+3. Implement listening state.
+4. Implement thinking state.
+5. Implement speaking state.
+6. Make the central sphere react to Hermes' actual voice/audio.
+7. Then begin building the deeper Novara memory/Obsidian architecture.
+8. Dashboards later.
 
 IMPORTANT DESIGN DECISIONS:
 - The Hermes Command Interface prototype is the visual source of truth.
@@ -51,21 +43,19 @@ IMPORTANT DESIGN DECISIONS:
 - Voice should be represented primarily through Hermes itself.
 - ElevenLabs must remain replaceable/modular.
 - Do not expose API keys in frontend code.
+- Novara must never fabricate business metrics.
+- If real data is unavailable, show "No data" or "Not connected" instead of invented values.
 
 IMPORTANT:
 Record the exact files changed in this session and any relevant architectural notes.
 
 FILES CHANGED IN THIS SESSION:
 - [apps/command-interface/public/app.js](../apps/command-interface/public/app.js)
-- [apps/command-interface/public/index.html](../apps/command-interface/public/index.html)
-- [apps/command-interface/public/modules/command-panels.js](../apps/command-interface/public/modules/command-panels.js)
-- [apps/command-interface/public/modules/voice-provider.js](../apps/command-interface/public/modules/voice-provider.js)
-- [apps/command-interface/public/modules/voice-state.js](../apps/command-interface/public/modules/voice-state.js)
 - [apps/command-interface/src/server.ts](../apps/command-interface/src/server.ts)
-- [design/Hermes Command Interface.dc.html](../design/Hermes%20Command%20Interface.dc.html)
-- [package.json](../package.json)
+- [docs/CHECKPOINT.md](./CHECKPOINT.md)
 
 ARCHITECTURAL NOTES:
 - The command interface stays on the existing Novara backend/data layer.
 - Voice remains provider-agnostic through the current abstraction seam.
 - The old organization view concepts are reserved for a future dedicated view, not the home screen.
+- The live UI now displays runtime values only and uses explicit no-data states when the runtime does not provide a value.

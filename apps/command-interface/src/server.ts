@@ -85,6 +85,20 @@ function parseStrategicDecision(markdown: string): StrategicDecision {
   };
 }
 
+function countConnectedNetworks(facts: string[]): number | null {
+  const networksLine = facts.find((fact) => fact.toLowerCase().startsWith("networks connected:"));
+  if (!networksLine) {
+    return null;
+  }
+
+  const list = networksLine.split(":", 2)[1]?.trim();
+  if (!list) {
+    return null;
+  }
+
+  return list.split(/\s*,\s*/).filter(Boolean).length || null;
+}
+
 async function countVaultMarkdownFiles(root: string): Promise<number> {
   let count = 0;
 
@@ -160,30 +174,31 @@ async function getSnapshot() {
   const agents = runtime.listAgents();
   const vaultDocCount = await countVaultMarkdownFiles(vaultRoot);
   const state = companyBrief.state;
-  const hasZeroBaseline = metricool.facts.some((fact) => fact.toLowerCase().includes("zero"));
+  const connectedNetworks = countConnectedNetworks(metricool.facts);
   const commandInterface = {
     companyPulse: {
-      revenue: "No data",
-      subscribers: hasZeroBaseline ? "0" : "No data",
-      subscribersTrend: hasZeroBaseline ? 8.0 : null,
-      clicks: hasZeroBaseline ? "0" : "No data",
+      revenue: null,
+      subscribers: null,
+      subscribersTrend: null,
+      clicks: null,
       clicksTrend: null,
-      views: hasZeroBaseline ? "0" : "No data",
-      viewsTrend: hasZeroBaseline ? 12.0 : null,
-      channelsActive: 2,
+      views: null,
+      viewsTrend: null,
+      channelsActive: connectedNetworks,
       agentsActive: agents.length,
     },
     currentNext: {
-      currently: state.activeWork[0] ?? "Monitoring company state",
-      next: state.pendingDecisions[0] ?? "No decisions required",
+      currently: state.activeWork[0] ?? null,
+      next: state.pendingDecisions[0] ?? null,
     },
     monthlyGoal: {
       label: "TURNOVER",
-      current: "€18,420",
-      target: "€25,000",
-      remaining: "€6,580",
-      progress: 73.7,
-      pace: "On pace",
+      current: null,
+      target: null,
+      remaining: null,
+      progress: null,
+      pace: null,
+      configured: false,
     },
     autonomy: {
       status: "Operational",
@@ -191,6 +206,7 @@ async function getSnapshot() {
       percent: 42,
     },
     agentCount: agents.length,
+    agentNames: agents.map((agent) => agent.name ?? agent.id ?? "Agent"),
   };
 
   return {

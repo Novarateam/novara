@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Novara Command Interface</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+    <style>
+      :root { color-scheme: dark; }
+      * { box-sizing: border-box; }
+      html,
+      body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        background: #060708;
+        color: #e9ebef;
+        overflow: hidden;
+        font-family: "Inter", sans-serif;
+      }
+      button,
+      input { font: inherit; }
+      .app-shell {
+        width: 100vw;
+        height: 100vh;
+        display: flex;
+        flex-direction: column;
+        background: radial-gradient(circle at top, rgba(126, 224, 255, 0.08), transparent 36%), #060708;
+      }
+      .topbar {
+        flex: 0 0 auto;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 18px 24px;
+        padding: 18px 48px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        backdrop-filter: blur(14px);
+      }
+      .brand-block,
+      .status-block,
+      .layout,
+      .rail,
+      .rail-card,
+      .focus-row,
+      .center-state,
+      .voice-actions,
+      .agent-list,
+      .attention-item,
+      .stack-item,
+      .sphere-caption,
+      .hero { display: flex; }
+      .brand-block { align-items: center; gap: 18px; flex-wrap: wrap; }
+      .brand-mark { font-size: 24px; font-weight: 600; letter-spacing: 0.08em; }
+      .brand-divider { width: 1px; height: 24px; background: rgba(255, 255, 255, 0.1); }
+      .brand-hermes { font-size: 18px; color: rgba(225, 231, 240, 0.7); font-family: "IBM Plex Mono", monospace; letter-spacing: 0.06em; }
+      .brand-live { display: flex; align-items: center; gap: 8px; font-size: 15px; color: rgba(225, 231, 240, 0.58); font-family: "IBM Plex Mono", monospace; white-space: nowrap; }
+      .live-dot,
+      .voice-dot,
+      .agent-dot,
+      .attention-dot { border-radius: 999px; }
+      .live-dot { width: 9px; height: 9px; background: #7ee0ff; box-shadow: 0 0 12px rgba(126, 224, 255, 0.5); }
+      .status-block { align-items: center; gap: 14px; flex-wrap: wrap; justify-content: flex-end; }
+      .status-chip,
+      .voice-chip,
+      .voice-action { border-radius: 999px; border: 1px solid rgba(255, 255, 255, 0.09); background: rgba(255, 255, 255, 0.03); color: #dde2ea; padding: 10px 16px; font-family: "IBM Plex Mono", monospace; font-size: 13px; letter-spacing: 0.04em; }
+      .voice-chip { display: flex; align-items: center; gap: 10px; cursor: pointer; }
+      .voice-dot { width: 10px; height: 10px; background: #7ee0ff; box-shadow: 0 0 10px rgba(126, 224, 255, 0.55); }
+      .layout { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: 360px minmax(0, 1fr) 360px; gap: 24px; padding: 22px 36px 18px; overflow-y: auto; }
+      .rail { flex-direction: column; gap: 10px; height: fit-content; }
+      .rail-card { flex-direction: column; gap: 12px; padding: 16px 18px; border-radius: 16px; background: rgba(18, 21, 26, 0.9); border: 1px solid rgba(255, 255, 255, 0.08); }
+      .rail-card-accent { border-color: rgba(126, 224, 255, 0.18); }
+      .rail-title,
+      .focus-label { font-family: "IBM Plex Mono", monospace; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(225, 231, 240, 0.58); }
+      .metric-grid { display: flex; flex-direction: column; gap: 9px; }
+      .metric-row { display: grid; grid-template-columns: 140px 70px 1fr; gap: 10px; align-items: baseline; }
+      .metric-label,
+      .metric-growth,
+      .attention-category,
+      .stack-label,
+      .goal-footer,
+      .voice-help,
+      .sphere-subtitle,
+      .center-state-subline { color: rgba(225, 231, 240, 0.56); font-family: "IBM Plex Mono", monospace; }
+      .metric-label { font-size: 13px; letter-spacing: 0.04em; }
+      .metric-value { font-size: 18px; color: #f1f4f8; font-family: "IBM Plex Mono", monospace; }
+      .metric-growth { font-size: 12px; text-align: right; }
+      .attention-item { gap: 12px; align-items: flex-start; }
+      .attention-dot { width: 10px; height: 10px; margin-top: 6px; flex: 0 0 auto; }
+      .attention-category { font-size: 13px; letter-spacing: 0.06em; text-transform: uppercase; }
+      .attention-title,
+      .stack-value,
+      .voice-line,
+      .voice-transcript,
+      .center-state-line { color: #f0f3f7; line-height: 1.45; }
+      .attention-title { font-size: 18px; margin-top: 2px; }
+      .attention-subtitle,
+      .stack-value-muted { font-size: 14px; color: rgba(225, 231, 240, 0.72); margin-top: 2px; }
+      .attention-empty { font-size: 18px; color: rgba(225, 231, 240, 0.54); line-height: 1.5; }
+      .stack-item { flex-direction: column; gap: 2px; }
+      .stack-label { font-size: 13px; letter-spacing: 0.06em; text-transform: uppercase; }
+      .stack-value { font-size: 18px; }
+      .hero { flex-direction: column; align-items: center; justify-content: center; gap: 16px; min-width: 0; min-height: 0; }
+      .hero-space { height: 18px; }
+      .sphere-wrap { position: relative; width: 420px; height: 420px; cursor: pointer; flex: 0 0 auto; }
+      .sphere-svg { position: relative; filter: brightness(1.02); }
+      .sphere-caption { flex-direction: column; align-items: center; text-align: center; gap: 6px; max-width: 680px; }
+      .sphere-title { font-size: 24px; color: #f0f3f7; line-height: 1.4; }
+      .sphere-subtitle { font-size: 14px; letter-spacing: 0.04em; }
+      .center-state { flex-direction: column; align-items: center; gap: 4px; text-align: center; max-width: 640px; }
+      .center-state-line { font-size: 20px; }
+      .center-state-subline { font-size: 13px; }
+      .focus-row { gap: 12px; flex-wrap: wrap; justify-content: center; }
+      .focus-card { flex-direction: column; gap: 10px; min-width: 300px; max-width: 400px; padding: 16px 20px; border-radius: 999px; background: rgba(18, 21, 26, 0.9); border: 1px solid rgba(255, 255, 255, 0.08); }
+      .goal-line { font-size: 18px; color: #f0f3f7; font-family: "IBM Plex Mono", monospace; }
+      .progress-track { width: 100%; height: 6px; border-radius: 999px; background: rgba(255, 255, 255, 0.08); overflow: hidden; }
+      .progress-fill { height: 100%; border-radius: inherit; background: linear-gradient(90deg, #7ee0ff, #5e8cff); }
+      .goal-footer { font-size: 12px; }
+      .voice-line { font-size: 16px; }
+      .voice-transcript { font-size: 14px; color: rgba(225, 231, 240, 0.72); }
+      .voice-actions { gap: 10px; flex-wrap: wrap; justify-content: center; }
+      .voice-action { cursor: pointer; }
+      .agent-list { flex-wrap: wrap; gap: 8px; }
+      .agent-pill { display: flex; align-items: center; gap: 7px; padding: 6px 10px; border-radius: 999px; border: 1px solid rgba(255, 255, 255, 0.08); color: rgba(225, 231, 240, 0.86); font-size: 13px; }
+      .agent-dot { width: 8px; height: 8px; background: #7ee0ff; box-shadow: 0 0 10px rgba(126, 224, 255, 0.45); }
+      .voice-help { font-size: 13px; line-height: 1.6; }
+      @media (max-width: 1280px) {
+        .layout { grid-template-columns: 320px minmax(0, 1fr); }
+        .right-rail { grid-column: 1 / -1; }
+      }
+      @media (max-width: 960px) {
+        html,
+        body { overflow: auto; }
+        .topbar,
+        .layout { padding-left: 20px; padding-right: 20px; }
+        .layout { grid-template-columns: 1fr; }
+        .hero { padding: 12px 0 24px; }
+        .sphere-wrap { width: min(84vw, 420px); height: min(84vw, 420px); }
+      }
+    </style>
+  </head>
+  <body>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

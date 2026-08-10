@@ -3,6 +3,10 @@
   "version": "0.1.0",
   "type": "module",
   "private": true,
+  "scripts": {
+    "runtime:test": "node --experimental-strip-types ./core/agent-runtime/src/index.ts",
+    "ui:command": "node --experimental-strip-types ./apps/command-interface/src/server.ts"
+  },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0"
   }

@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  body { margin: 0; background: #060708; }
+  @keyframes edgeIdle { 0%,100% { opacity: .32; } 50% { opacity: .5; } }
+  @keyframes edgeListening { 0%,100% { opacity: .55; transform: scale(1); } 50% { opacity: .85; transform: scale(1.025); } }
+  @keyframes edgeThinking { 0%,100% { opacity: .55; } 50% { opacity: .8; } }
+  @keyframes ringSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+  @keyframes ringSpinFast { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+  @keyframes waveBar0 { 0%,100% { transform: scaleY(.3); } 50% { transform: scaleY(1); } }
+  @keyframes waveBar1 { 0%,100% { transform: scaleY(.7); } 50% { transform: scaleY(.25); } }
+  @keyframes waveBar2 { 0%,100% { transform: scaleY(.5); } 50% { transform: scaleY(.9); } }
+  @keyframes heartBeat { 0%,100% { transform: scale(1); } 50% { transform: scale(1.045); } }
+  @keyframes heartBeatFast { 0%,100% { transform: scale(1); } 50% { transform: scale(1.09); } }
+</style>
+</helmet>
+
+<div style="width:100vw;height:100vh;background:{{ bgPage }};color:{{ textPrimary }};font-family:'Inter',sans-serif;display:flex;flex-direction:column;overflow:hidden;position:relative;box-sizing:border-box;">
+
+  <!-- TOP BAR -->
+  <div style="flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px 24px;padding:18px 48px;border-bottom:1px solid {{ borderSubtle }};">
+    <div style="display:flex;align-items:center;gap:21px;flex-wrap:wrap;">
+      <div style="font-size:25px;font-weight:600;letter-spacing:0.08em;">NOVARA</div>
+      <div style="width:1px;height:24px;background:{{ borderSubtle }};"></div>
+      <div style="font-size:19px;color:{{ textTertiary }};font-family:'IBM Plex Mono',monospace;letter-spacing:0.05em;">HERMES</div>
+      <div style="width:1px;height:24px;background:{{ borderSubtle }};"></div>
+      <div style="display:flex;align-items:center;gap:9px;font-family:'IBM Plex Mono',monospace;font-size:16px;color:{{ textTertiary }};white-space:nowrap;">
+        <div style="width:9px;height:9px;border-radius:50%;background:{{ accent }};animation:edgeIdle 2.4s ease-in-out infinite;"></div>
+        <span>LIVE · {{ updatedAgo }}</span>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:21px;font-family:'IBM Plex Mono',monospace;font-size:18px;color:{{ textSecondary }};position:relative;flex-wrap:wrap;">
+      <div style="white-space:nowrap;">{{ agentsActiveLabel }}</div>
+      <div style="width:1px;height:20px;background:{{ borderSubtle }};"></div>
+      <div style="font-size:16px;color:{{ textTertiary }};white-space:nowrap;">AUTONOMY · LVL 2</div>
+      <div style="font-size:16px;color:{{ textTertiary }};white-space:nowrap;">SYSTEM · OK</div>
+      <div onClick="{{ toggleSettings }}" style="display:flex;align-items:center;gap:12px;padding:11px 21px;border-radius:26px;border:1px solid {{ borderSubtle }};cursor:pointer;white-space:nowrap;">
+        <div style="width:12px;height:12px;border-radius:50%;background:{{ keyDotColor }};"></div>
+        <span>{{ keyStatusLabel }}</span>
+      </div>
+      <sc-if value="{{ showSettings }}" hint-placeholder-val="{{ false }}">
+        <div style="position:absolute;top:60px;right:0;width:480px;background:{{ bgPanel }};border:1px solid {{ borderSubtle }};border-radius:14px;padding:28px;display:flex;flex-direction:column;gap:16px;z-index:10;">
+          <div style="font-size:20px;color:{{ textTertiary }};letter-spacing:0.05em;">ELEVENLABS API KEY</div>
+          <input type="password" value="{{ apiKeyDraft }}" onChange="{{ onKeyDraftChange }}" placeholder="sk_..." style="background:{{ bgCard }};border:1px solid {{ borderSubtle }};border-radius:8px;padding:14px 18px;color:{{ textPrimary }};font-size:21px;font-family:'IBM Plex Mono',monospace;outline:none;"/>
+          <div onClick="{{ saveKey }}" style="text-align:center;padding:14px;border-radius:8px;background:{{ accent }};color:{{ bgPage }};font-size:21px;font-weight:600;cursor:pointer;">Save</div>
+          <div style="font-size:19px;color:{{ textTertiary }};line-height:1.4;">Stored locally in your browser only. Without a key, Hermes speaks using your browser's voice.</div>
+        </div>
+      </sc-if>
+    </div>
+  </div>
+
+  <!-- MAIN -->
+  <div style="flex:1 1 auto;display:grid;grid-template-columns:405px 1fr 405px;gap:24px;padding:20px 36px 15px;min-height:0;overflow-y:auto;">
+
+    <!-- COMPANY PULSE + ATTENTION -->
+    <div style="display:flex;flex-direction:column;gap:9px;height:fit-content;">
+    <div style="border:1px solid {{ borderSubtle }};border-radius:16px;padding:14px 20px;background:{{ bgPanel }};display:flex;flex-direction:column;gap:11px;">
+      <div style="font-size:16px;letter-spacing:0.08em;color:{{ textTertiary }};font-family:'IBM Plex Mono',monospace;">COMPANY PULSE</div>
+      <div style="display:flex;flex-direction:column;gap:9px;">
+        <sc-for list="{{ metrics }}" as="m" hint-placeholder-count="6">
+          <div style="display:grid;grid-template-columns:160px 100px 1fr;align-items:baseline;">
+            <div style="font-size:14px;letter-spacing:0.04em;color:{{ textTertiary }};font-family:'IBM Plex Mono',monospace;">{{ m.label }}</div>
+            <div style="font-size:21px;font-family:'IBM Plex Mono',monospace;color:{{ textPrimary }};">{{ m.value }}</div>
+            <div style="font-size:14px;font-family:'IBM Plex Mono',monospace;color:{{ textTertiary }};">{{ m.arrow }} {{ m.growth }}</div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+
+    <div style="border:1px solid {{ attentionBorder }};border-radius:16px;padding:14px 20px;background:{{ bgPanel }};display:flex;flex-direction:column;gap:12px;">
+      <div style="font-size:15px;letter-spacing:0.08em;color:{{ textTertiary }};font-family:'IBM Plex Mono',monospace;">NEEDS YOUR ATTENTION</div>
+      <sc-if value="{{ hasAttentionItems }}" hint-placeholder-val="{{ true }}">
+        <sc-for list="{{ attentionItems }}" as="item" hint-placeholder-count="3">
+          <div style="display:flex;align-items:flex-start;gap:12px;">
+            <div style="width:10px;height:10px;border-radius:50%;background:{{ item.color }};margin-top:6px;flex:0 0 auto;"></div>
+            <div>
+              <div style="font-size:14px;letter-spacing:0.06em;color:{{ item.color }};font-family:'IBM Plex Mono',monospace;">{{ item.category }}</div>
+              <div style="font-size:19px;color:{{ textPrimary }};margin-top:2px;">{{ item.title }}</div>
+              <div style="font-size:16px;color:{{ textSecondary }};margin-top:2px;">{{ item.subtitle }}</div>
+            </div>
+          </div>
+        </sc-for>
+      </sc-if>
+      <sc-if value="{{ hasNoAttentionItems }}" hint-placeholder-val="{{ false }}">
+        <div style="font-size:19px;color:{{ textTertiary }};line-height:1.4;">All systems operating normally. No decisions required.</div>
+      </sc-if>
+    </div>
+
+    <div style="border:1px solid {{ borderSubtle }};border-radius:16px;padding:14px 20px;background:{{ bgPanel }};display:flex;flex-direction:column;gap:12px;">
+      <div>
+        <div style="font-size:14px;letter-spacing:0.08em;color:{{ textTertiary }};font-family:'IBM Plex Mono',monospace;">CURRENTLY</div>
+        <div style="font-size:19px;color:{{ textPrimary }};margin-top:2px;">{{ currentlyText }}</div>
+        <div style="font-size:15px;color:{{ textTertiary }};margin-top:2px;">{{ currentlyMeta }}</div>
+      </div>
+      <div>
+        <div style="font-size:14px;letter-spacing:0.08em;color:{{ textTertiary }};font-family:'IBM Plex Mono',monospace;">NEXT</div>
+        <div style="font-size:19px;color:{{ textSecondary }};margin-top:2px;">{{ nextText }}</div>
+        <div style="font-size:15px;color:{{ textTertiary }};margin-top:2px;">{{ nextMeta }}</div>
+      </div>
+    </div>
+    </div>
+
+    <!-- HERMES CENTER -->
+    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;min-width:0;min-height:0;">
+      <div onClick="{{ onSphereClick }}" style="position:relative;width:420px;height:420px;flex:0 0 auto;cursor:pointer;">
+        <div ref="{{ glowRef }}" style="position:absolute;inset:-27px;border-radius:50%;box-shadow:0 0 90px 27px {{ accentGlowShadow }};opacity:{{ baseGlow }};filter:blur(30px);animation:{{ edgeAnim }};"></div>
+        <svg viewBox="0 0 200 200" width="420" height="420" style="position:relative;filter:brightness({{ heartBrightness }});">
+          <g style="transform-origin:100px 100px;animation:{{ breatheAnim }};">
+            <sc-for list="{{ edges }}" as="e" hint-placeholder-count="60">
+              <line x1="{{ e.x1 }}" y1="{{ e.y1 }}" x2="{{ e.x2 }}" y2="{{ e.y2 }}" stroke="{{ accent }}" stroke-width="0.5" opacity="0.32"></line>
+            </sc-for>
+            <sc-for list="{{ points }}" as="p" hint-placeholder-count="55">
+              <circle cx="{{ p.x }}" cy="{{ p.y }}" r="{{ p.r }}" fill="{{ accent }}" opacity="{{ p.o }}"></circle>
+            </sc-for>
+          </g>
+        </svg>
+        <div style="position:absolute;inset:10px;border-radius:50%;background:conic-gradient(from 0deg, transparent 0deg, {{ accent }} 10deg, transparent 46deg);opacity:{{ energyOpacity }};animation:{{ spinAnim }};pointer-events:none;"></div>
+      </div>
+
+      <div style="width:100%;max-width:630px;text-align:center;font-size:24px;color:{{ textPrimary }};line-height:1.4;min-height:36px;">{{ statusLine }}</div>
+
+      <div style="border:1px solid {{ goalBorder }};border-radius:39px;padding:14px 30px;background:{{ bgPanel }};display:flex;align-items:center;gap:18px;transition:border-color .5s ease;flex-wrap:wrap;justify-content:center;">
+        <div style="font-size:16px;letter-spacing:0.06em;color:{{ textTertiary }};font-family:'IBM Plex Mono',monospace;">GOAL · TURNOVER</div>
+        <svg width="45" height="45" viewBox="0 0 96 96">
+          <circle cx="48" cy="48" r="40" fill="none" stroke="{{ trackColor }}" stroke-width="12"></circle>
+          <circle cx="48" cy="48" r="40" fill="none" stroke="{{ accent }}" stroke-width="12" stroke-linecap="round" stroke-dasharray="{{ ringDash }}" transform="rotate(-90 48 48)"></circle>
+        </svg>
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:19px;color:{{ textPrimary }};">{{ turnoverPct }}</div>
+        <div style="width:1px;height:21px;background:{{ borderSubtle }};"></div>
+        <div style="display:flex;gap:15px;font-family:'IBM Plex Mono',monospace;font-size:17px;">
+          <div><span style="color:{{ textTertiary }};">ACTUAL </span><span>{{ turnoverActual }}</span></div>
+          <div><span style="color:{{ textTertiary }};">LEFT </span><span style="color:{{ textSecondary }};">{{ turnoverRemaining }}</span></div>
+        </div>
+        <div style="width:1px;height:21px;background:{{ borderSubtle }};"></div>
+        <div style="font-size:16px;letter-spacing:0.05em;color:{{ accent }};">{{ pacLabel }}</div>
+      </div>
+
+      <input value="{{ draft }}" onChange="{{ onDraftChange }}" onKeyDown="{{ onKeyDown }}" placeholder="or type to Hermes" style="width:100%;max-width:540px;background:transparent;border:none;border-bottom:1px solid {{ borderSubtle }};padding:9px 6px;color:{{ textSecondary }};font-size:19px;font-family:'Inter',sans-serif;outline:none;text-align:center;"/>
+    </div>
+
+    <!-- AGENT ACTIVITY / SPEAKING -->
+    <div style="border:1px solid {{ agentsBorder }};border-radius:16px;padding:24px 27px;background:{{ bgPanel }};display:flex;flex-direction:column;gap:18px;transition:border-color .5s ease;height:fit-content;">
+      <sc-if value="{{ isSpeaking }}" hint-placeholder-val="{{ false }}">
+        <div style="font-size:16px;letter-spacing:0.08em;color:{{ textTertiary }};font-family:'IBM Plex Mono',monospace;">HERMES SPEAKING</div>
+        <div style="display:flex;align-items:center;gap:5px;height:105px;justify-content:center;">
+          <sc-for list="{{ waveBars }}" as="bar" hint-placeholder-count="28">
+            <div style="width:6px;border-radius:3px;background:{{ accent }};box-shadow:0 0 9px 1px {{ accentGlowShadow }};height:{{ bar.height }};animation:{{ bar.anim }};"></div>
+          </sc-for>
+        </div>
+      </sc-if>
+      <sc-if value="{{ isNotSpeaking }}" hint-placeholder-val="{{ true }}">
+        <div style="font-size:16px;letter-spacing:0.08em;color:{{ textTertiary }};font-family:'IBM Plex Mono',monospace;">{{ agentsActiveLabel }}</div>
+        <div style="display:flex;gap:15px;flex-wrap:wrap;">
+          <sc-for list="{{ agents }}" as="agent" hint-placeholder-count="6">
+            <div style="display:flex;align-items:center;gap:7px;font-size:17px;color:{{ textSecondary }};">
+              <div style="width:10px;height:10px;border-radius:50%;background:{{ agent.color }};"></div>{{ agent.name }}
+            </div>
+          </sc-for>
+        </div>
+        <div style="font-size:19px;color:{{ textSecondary }};margin-top:2px;">The organization is active. Open a name to inspect it.</div>
+        <div style="font-size:19px;color:{{ accent }};cursor:pointer;margin-top:4px;">View organization →</div>
+      </sc-if>
+    </div>
+  </div>
+
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  glowRef = React.createRef();
+
+  constructor(props) {
+    super(props);
+    this.points = this.generatePoints();
+    this.edges = this.generateEdges(this.points);
+  }
+
+  generatePoints() {
+    let seed = 42;
+    const rand = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
+    const pts = [];
+    for (let i = 0; i < 220; i++) {
+      const ang = rand() * Math.PI * 2;
+      const rad = Math.sqrt(rand()) * 92;
+      const depth = rand();
+      pts.push({ x: 100 + Math.cos(ang) * rad, y: 100 + Math.sin(ang) * rad, r: 0.9 + depth * 1.5, o: 0.4 + depth * 0.55 });
+    }
+    return pts;
+  }
+
+  generateEdges(pts) {
+    const edges = []; const seen = new Set();
+    pts.forEach((p, i) => {
+      const dists = pts.map((q, j) => ({ j, d: j === i ? Infinity : Math.hypot(p.x - q.x, p.y - q.y) })).sort((a, b) => a.d - b.d);
+      for (let k = 0; k < 4; k++) {
+        const { j, d } = dists[k];
+        if (d < 15) {
+          const key = i < j ? `${i}-${j}` : `${j}-${i}`;
+          if (!seen.has(key)) { seen.add(key); edges.push([i, j]); }
+        }
+      }
+    });
+    return edges;
+  }
+
+  state = {
+    sphereState: 'idle',
+    transcript: [],
+    draft: '',
+    highlight: null,
+    showSettings: false,
+    apiKeyDraft: '',
+    hasKey: false
+  };
+
+  componentDidMount() {
+    this.setState({ hasKey: !!localStorage.getItem('novara_el_key') });
+  }
+
+  toggleSettings() { this.setState(s => ({ showSettings: !s.showSettings })); }
+  onKeyDraftChange(e) { this.setState({ apiKeyDraft: e.target.value }); }
+  saveKey() {
+    if (this.state.apiKeyDraft.trim()) localStorage.setItem('novara_el_key', this.state.apiKeyDraft.trim());
+    this.setState({ hasKey: !!localStorage.getItem('novara_el_key'), showSettings: false, apiKeyDraft: '' });
+  }
+
+  onDraftChange(e) { this.setState({ draft: e.target.value }); }
+  onKeyDown(e) { if (e.key === 'Enter') this.onSend(); }
+  onSend() { const t = this.state.draft.trim(); if (t) this.ask(t); }
+
+  onSphereClick() {
+    if (this.state.sphereState === 'idle') this.startListening();
+  }
+
+  startListening() {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) { this.ask(this.state.draft.trim() || "How's revenue tracking?"); return; }
+    this.setState({ sphereState: 'listening' });
+    try {
+      const rec = new SR();
+      rec.lang = 'en-US'; rec.interimResults = false;
+      rec.onresult = (e) => this.ask(e.results[0][0].transcript);
+      rec.onerror = () => this.setState({ sphereState: 'idle' });
+      rec.onend = () => { if (this.state.sphereState === 'listening') this.setState({ sphereState: 'idle' }); };
+      rec.start();
+    } catch (e) { this.setState({ sphereState: 'idle' }); }
+  }
+
+  getReply(text) {

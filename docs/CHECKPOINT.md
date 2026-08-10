@@ -4,14 +4,12 @@ DATE:
 2026-08-10
 
 CURRENT:
-- durable Agent Runtime foundation
-- canonical agent/task/department/message/memory/permission schemas
-- file-backed persistence
-- append-only audit log
-- Hermes can create and execute a real runtime task
-- Hermes can delegate an opportunity/research request to A-002
-- TaskRecord/result/audit evidence persists
-- existing Hermes fallback still works
+- durable Agent Runtime
+- Hermes -> Task -> Agent orchestration
+- generic agent-to-agent sendMessage()
+- persisted MessageEnvelope
+- audit events
+- A-001 -> A-002 delegation now uses generic messaging
 
 COMPLETED:
 - Hermes-first Command Interface implemented
@@ -34,11 +32,9 @@ Voice is connected through the existing provider abstraction to backend ElevenLa
 The active flow is: typed message -> Hermes reasoning -> voice playback -> idle.
 
 NEXT:
-1. general structured agent communication
-2. task routing beyond the current deterministic A-002 path
-3. layered memory
-4. permissions/risk/approval controls
-5. additional departments/agents later
+1. design/implement layered memory
+2. then Finance/Accountant capability
+3. then departments and additional agents
 
 IMPORTANT DESIGN DECISIONS:
 - The Hermes Command Interface prototype is the visual source of truth.

@@ -109,6 +109,7 @@ export interface MessageEnvelope {
   senderAgentId: string;
   recipientAgentId: string;
   taskId: string;
+  type: string;
   priority: TaskPriority;
   payload: unknown;
   createdAt: string;

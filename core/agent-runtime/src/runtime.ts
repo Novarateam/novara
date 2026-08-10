@@ -24,6 +24,7 @@ import type {
   SpecialistExecutionResponse,
   StoreMemoryRequest,
   StoreMemoryResponse,
+  TaskPriority,
   TaskRecord,
   TaskStatus,
 } from "./types.ts";
@@ -269,6 +270,53 @@ export class AgentRuntime {
     });
   }
 
+  sendMessage(input: {
+    senderAgentId: string;
+    recipientAgentId: string;
+    taskId: string;
+    type: string;
+    priority?: TaskPriority;
+    payload: unknown;
+    id?: string;
+    createdAt?: string;
+  }): MessageEnvelope {
+    const sender = this.agents.get(input.senderAgentId);
+    if (!sender) {
+      throw new Error(`Message sender is not registered: ${input.senderAgentId}`);
+    }
+
+    const recipient = this.agents.get(input.recipientAgentId);
+    if (!recipient) {
+      throw new Error(`Message recipient is not registered: ${input.recipientAgentId}`);
+    }
+
+    const type = String(input.type ?? "").trim();
+    if (!type) {
+      throw new Error("Message type is required.");
+    }
+
+    const message: MessageEnvelope = {
+      id: input.id ?? createStableId("msg"),
+      senderAgentId: input.senderAgentId,
+      recipientAgentId: input.recipientAgentId,
+      taskId: input.taskId,
+      type,
+      priority: input.priority ?? "normal",
+      payload: input.payload,
+      createdAt: input.createdAt ?? createTimestamp(),
+    };
+
+    this.repository.upsertMessage(message);
+    this.appendAudit(input.senderAgentId, "message.sent", "Agent message sent.", {
+      messageId: message.id,
+      messageType: message.type,
+      recipientAgentId: message.recipientAgentId,
+      priority: message.priority,
+    }, message.taskId);
+
+    return message;
+  }
+
   registerAgent(definition: AgentDefinition): void {
     if (this.agents.has(definition.id)) {
       throw new Error(`Agent already registered: ${definition.id}`);
@@ -447,19 +495,17 @@ export class AgentRuntime {
       const directorDecision = output?.directorDecision;
 
       if (directorDecision?.selectedAgent === "A-002") {
-        const message: MessageEnvelope = {
-          id: createStableId("msg"),
+        const message = this.sendMessage({
           senderAgentId: "A-001",
           recipientAgentId: "A-002",
           taskId: safeTask.id,
+          type: "task.delegation",
           priority: "normal",
           payload: {
             decision: directorDecision,
             objective: safeTask.objective,
           },
-          createdAt: createTimestamp(),
-        };
-        this.repository.upsertMessage(message);
+        });
         this.appendAudit("A-001", "message.delegated", "Delegated opportunity task to A-002.", {
           messageId: message.id,
           delegatedTask: directorDecision.delegatedTask,

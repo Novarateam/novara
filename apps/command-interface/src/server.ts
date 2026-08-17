@@ -1,8 +1,29 @@
 import { createServer } from "node:http";
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { AgentRuntime } from "../../../core/agent-runtime/src/runtime.ts";
-import { getAgentDefinitions } from "../../../core/agent-runtime/src/agent.ts";
+import { fileURLToPath } from "node:url";
+import type { RecordHumanGovernanceDecisionRequest } from "../../../core/agent-runtime/src/types.ts";
+import { routeHermesRequest } from "./hermes-routing.ts";
+import { handleTrustReviewCommand } from "./trust-review-command.ts";
+import { handleGovernanceDecisionCommand } from "./governance-decision-command.ts";
+import { handlePromotionCommand } from "./promotion-command.ts";
+import { handleContentReviewReadCommand, handleContentReviewDecisionCommand } from "./content-review-command.ts";
+import { handlePublishingQueueReadCommand, handlePublishingQueueEnqueueCommand } from "./publishing-queue-command.ts";
+import { handleMetricoolStatusCommand, handleMetricoolPreflightCommand } from "./metricool-command.ts";
+import { handleMetricoolPublishingCommand } from "./metricool-publishing-command.ts";
+import { handleProductionExecutionCommand } from "./production-execution-command.ts";
+import { handleProductionStatusCommand } from "./production-status-command.ts";
+import { handleProductionApprovalCommand } from "./production-approval-command.ts";
+import { handleProductionBriefCommand } from "./production-brief-command.ts";
+import { handleInstitutionalKnowledgeCommand } from "./institutional-knowledge-command.ts";
+import { readOpenAiConnectionStatus, saveOpenAiKey, testOpenAiConnection } from "./openai-connection-service.ts";
+import { readContentReviewAccessStatus, saveContentReviewAccess } from "./content-review-connection-service.ts";
+import { readProductionAccessStatus, saveProductionAccess } from "./production-access-connection-service.ts";
+import { readPublishingAccessStatus, savePublishingAccess } from "./publishing-access-connection-service.ts";
+import { readElevenLabsConnectionStatus, saveElevenLabsConnection, testElevenLabsConnection } from "./elevenlabs-connection-service.ts";
+import { readMetricoolConnectionStatus, saveMetricoolConnection, testMetricoolConnection } from "./metricool-connection-service.ts";
+import { configureRevenueCatConnection, readRevenueCatConnectionStatus, testRevenueCatConnection } from "./revenuecat-connection-service.ts";
+import { createRuntimeHost, type RuntimeHost } from "./runtime-host.ts";
 
 type MetricoolEvidence = {
   sourceDate: string | null;
@@ -152,43 +173,7 @@ async function countVaultMarkdownFiles(root: string): Promise<number> {
   return count;
 }
 
-function buildRuntimeWithEvidence(metricool: MetricoolEvidence, objective: string): AgentRuntime {
-  const runtime = new AgentRuntime();
-  for (const definition of getAgentDefinitions()) {
-    runtime.registerAgent(definition);
-  }
-
-  runtime.storeMemory({
-    entry: {
-      id: "mem-metricool-evidence-ui",
-      type: "evidence",
-      content: {
-        source: "Metricool MCP",
-        opportunity: "Novara Socials growth sprint",
-        facts: metricool.facts,
-        missing: metricool.unresolvedQuestions,
-        assessment: metricool.status,
-      },
-      source: "Metricool MCP/Obsidian",
-      timestamp: new Date().toISOString(),
-      confidence: 0.32,
-      authority: "recommend",
-      status: "proposed",
-    },
-  });
-
-  runtime.execute("A-001", {
-    id: "TASK-COMMAND-UI-001",
-    objective,
-    input: {
-      focus: "CEO command interface briefing",
-    },
-  });
-
-  return runtime;
-}
-
-async function getSnapshot() {
+async function getSnapshot(runtimeHost: RuntimeHost) {
   const metricoolMarkdown = await readIfExists(metricoolNotePath);
   const strategicMarkdown = await readIfExists(strategicDecisionPath);
   const objectiveMarkdown = await readIfExists(currentObjectivesPath);
@@ -199,7 +184,7 @@ async function getSnapshot() {
     parseBullets(objectiveMarkdown, "Current Strategic Focus")[0] ??
     "Build a durable social attention engine for Novara.";
 
-  const runtime = buildRuntimeWithEvidence(metricool, objective);
+  const runtime = runtimeHost.getRuntime();
   const companyBrief = runtime.getCompanyBrief();
   const agents = runtime.listAgents();
   const vaultDocCount = await countVaultMarkdownFiles(vaultRoot);
@@ -252,82 +237,6 @@ async function getSnapshot() {
     },
     commandInterface,
   };
-}
-
-async function getRuntimeContext() {
-  const metricoolMarkdown = await readIfExists(metricoolNotePath);
-  const strategicMarkdown = await readIfExists(strategicDecisionPath);
-  const objectiveMarkdown = await readIfExists(currentObjectivesPath);
-
-  const metricool = parseMetricoolEvidence(metricoolMarkdown);
-  const strategicDecision = parseStrategicDecision(strategicMarkdown);
-  const objective =
-    parseBullets(objectiveMarkdown, "Current Strategic Focus")[0] ??
-    "Build a durable social attention engine for Novara.";
-
-  const runtime = buildRuntimeWithEvidence(metricool, objective);
-  const companyBrief = runtime.getCompanyBrief();
-  const agents = runtime.listAgents();
-  const vaultDocCount = await countVaultMarkdownFiles(vaultRoot);
-  const state = companyBrief.state;
-  const connectedNetworks = countConnectedNetworks(metricool.facts);
-  const commandInterface = {
-    companyPulse: {
-      revenue: null,
-      subscribers: null,
-      subscribersTrend: null,
-      clicks: null,
-      clicksTrend: null,
-      views: null,
-      viewsTrend: null,
-      channelsActive: connectedNetworks,
-      agentsActive: agents.length,
-    },
-    currentNext: {
-      currently: state.activeWork[0] ?? null,
-      next: state.pendingDecisions[0] ?? null,
-    },
-    monthlyGoal: {
-      label: "TURNOVER",
-      current: null,
-      target: null,
-      remaining: null,
-      progress: null,
-      pace: null,
-      configured: false,
-    },
-    autonomy: {
-      status: "Operational",
-      level: "2",
-      percent: 42,
-    },
-    agentCount: agents.length,
-    agentNames: agents.map((agent) => agent.name ?? agent.id ?? "Agent"),
-  };
-
-  return {
-    runtime,
-    snapshot: {
-      generatedAt: new Date().toISOString(),
-      objective,
-      companyBrief,
-      agents,
-      metricool,
-      strategicDecision,
-      knowledge: {
-        vaultPath: vaultRoot,
-        markdownDocuments: vaultDocCount,
-      },
-      commandInterface,
-    },
-  };
-}
-
-function isOpportunityTaskQuestion(question: string): boolean {
-  const q = question.toLowerCase();
-  return ["opportunit", "research", "investigate", "evaluate", "evidence", "growth sprint"].some((token) =>
-    q.includes(token),
-  );
 }
 
 function respondJson(res: any, statusCode: number, body: unknown) {
@@ -480,9 +389,8 @@ function buildHermesReply(question: string, snapshot: Awaited<ReturnType<typeof 
   };
 }
 
-await loadEnvFile(envPath);
-
-const server = createServer(async (req, res) => {
+export function createCommandInterfaceServer(runtimeHost: RuntimeHost = createRuntimeHost()) {
+  return createServer(async (req, res) => {
   const url = new URL(req.url ?? "/", "http://localhost");
 
   if (url.pathname === "/api/voice/status") {
@@ -525,20 +433,345 @@ const server = createServer(async (req, res) => {
     return;
   }
 
+  if (url.pathname === "/api/runtime/health") {
+    if (req.method !== "GET") {
+      respondJson(res, 405, { error: "Method not allowed" });
+      return;
+    }
+    const health = runtimeHost.getHealth();
+    respondJson(res, health.initialized ? 200 : 503, health);
+    return;
+  }
+
   if (url.pathname === "/api/command-interface") {
+    if (req.method !== "GET") {
+      respondJson(res, 405, { error: "Method not allowed" });
+      return;
+    }
     try {
-      const context = await getRuntimeContext();
-      respondJson(res, 200, context.snapshot);
+      respondJson(res, 200, await getSnapshot(runtimeHost));
     } catch (error) {
-      respondJson(res, 500, { error: (error as Error).message });
+      respondJson(res, 503, { error: (error as Error).message });
+    }
+    return;
+  }
+
+  if (url.pathname === "/api/trust-review") {
+    if (req.method !== "GET") {
+      respondJson(res, 405, { error: "Method not allowed" });
+      return;
+    }
+    const response = handleTrustReviewCommand({
+      operation: url.searchParams.get("operation") as "listTrustReports" | "getTrustReport" | "getAgentTrustReview" | undefined,
+      reportId: url.searchParams.get("reportId") ?? undefined,
+      agentId: url.searchParams.get("agentId") ?? undefined,
+    });
+    respondJson(res, response.status === "invalid-request" ? 400 : 200, response);
+    return;
+  }
+
+  if (url.pathname === "/api/governance-decision") {
+    if (req.method !== "POST") {
+      respondJson(res, 405, { error: "Method not allowed" });
+      return;
+    }
+    try {
+      const body = await readJsonBody(req);
+      const response = handleGovernanceDecisionCommand({
+        decisionId: typeof body?.decisionId === "string" ? body.decisionId : undefined,
+        agentId: typeof body?.agentId === "string" ? body.agentId : "",
+        trustReportId: typeof body?.trustReportId === "string" ? body.trustReportId : "",
+        reviewerId: typeof body?.reviewerId === "string" ? body.reviewerId : "",
+        decision: typeof body?.decision === "string" ? body.decision as RecordHumanGovernanceDecisionRequest["decision"] : "" as RecordHumanGovernanceDecisionRequest["decision"],
+        reason: typeof body?.reason === "string" ? body.reason : undefined,
+      });
+      respondJson(res, response.status === "created" ? 201 : 400, response);
+    } catch (error) {
+      respondJson(res, 400, { error: (error as Error).message });
+    }
+    return;
+  }
+
+  if (url.pathname === "/api/agent-promotion") {
+    if (req.method !== "POST") {
+      respondJson(res, 405, { error: "Method not allowed" });
+      return;
+    }
+    try {
+      const body = await readJsonBody(req);
+      const response = handlePromotionCommand({
+        operation: typeof body?.operation === "string" ? body.operation as never : undefined,
+        proposalId: typeof body?.proposalId === "string" ? body.proposalId : undefined,
+        agentId: typeof body?.agentId === "string" ? body.agentId : undefined,
+        trustReportId: typeof body?.trustReportId === "string" ? body.trustReportId : undefined,
+        governanceDecisionId: typeof body?.governanceDecisionId === "string" ? body.governanceDecisionId : undefined,
+        promotionType: typeof body?.promotionType === "string" ? body.promotionType : undefined,
+        confirmationId: typeof body?.confirmationId === "string" ? body.confirmationId : undefined,
+        reviewerId: typeof body?.reviewerId === "string" ? body.reviewerId : undefined,
+        confirmation: typeof body?.confirmation === "string" ? body.confirmation : undefined,
+        promotionId: typeof body?.promotionId === "string" ? body.promotionId : undefined,
+      }, req.headers["x-novara-promotion-key"] as string | undefined);
+      respondJson(res, response.status === "invalid-request" ? 400 : response.result.status === "rejected" ? 400 : 201, response);
+    } catch (error) {
+      respondJson(res, 400, { error: (error as Error).message });
+    }
+    return;
+  }
+
+  if (url.pathname === "/api/content-review") {
+    if (req.method !== "GET") {
+      respondJson(res, 405, { error: "Method not allowed" });
+      return;
+    }
+    const response = handleContentReviewReadCommand({
+      operation: url.searchParams.get("operation") as "listProposals" | "getProposal" | undefined,
+      proposalId: url.searchParams.get("proposalId") ?? undefined,
+    });
+    respondJson(res, response.status === "invalid-request" ? 400 : 200, response);
+    return;
+  }
+
+  if (url.pathname === "/api/content-proposal") {
+    if (req.method !== "POST") { respondJson(res, 405, { error: "Method not allowed" }); return; }
+    try {
+      const body = await readJsonBody(req);
+      const content = typeof body?.content === "string" ? body.content.trim() : "";
+      const platform = typeof body?.platform === "string" ? body.platform.trim() : "";
+      const goal = typeof body?.goal === "string" ? body.goal.trim() : "";
+      if (!content || !platform) { respondJson(res, 400, { error: "content and platform are required" }); return; }
+      const objective = `${goal || "Create an engaging short-form video concept"} for ${platform}.`;
+      const response = await runtimeHost.getRuntime().executeSpecialist("A-014", { id: `content-input-${Date.now()}`, objective, input: { content: `${content}\n\nTarget platform: ${platform}` } });
+      respondJson(res, response.result.status === "completed" ? 201 : 400, response);
+    } catch (error) { respondJson(res, 400, { error: (error as Error).message }); }
+    return;
+  }
+
+  if (url.pathname === "/api/openai-connection") {
+    if (req.method === "GET") { respondJson(res, 200, readOpenAiConnectionStatus()); return; }
+    if (req.method === "POST") { try { const body = await readJsonBody(req); saveOpenAiKey(envPath, typeof body?.apiKey === "string" ? body.apiKey : ""); respondJson(res, 200, { configured: true }); } catch (error) { respondJson(res, 400, { error: (error as Error).message }); } return; }
+    respondJson(res, 405, { error: "Method not allowed" }); return;
+  }
+
+  if (url.pathname === "/api/openai-connection/test") {
+    if (req.method !== "POST") { respondJson(res, 405, { error: "Method not allowed" }); return; }
+    respondJson(res, 200, await testOpenAiConnection()); return;
+  }
+
+  if (url.pathname === "/api/elevenlabs-connection") {
+    if (req.method === "GET") { respondJson(res, 200, readElevenLabsConnectionStatus()); return; }
+    if (req.method === "POST") { try { const body = await readJsonBody(req); const modelId = typeof body?.modelId === "string" && body.modelId.trim() ? body.modelId : undefined; saveElevenLabsConnection(envPath, typeof body?.apiKey === "string" ? body.apiKey : "", typeof body?.voiceId === "string" ? body.voiceId : "", modelId); respondJson(res, 200, { configured: true }); } catch (error) { respondJson(res, 400, { error: (error as Error).message }); } return; }
+    respondJson(res, 405, { error: "Method not allowed" }); return;
+  }
+  if (url.pathname === "/api/elevenlabs-connection/test") {
+    if (req.method !== "POST") { respondJson(res, 405, { error: "Method not allowed" }); return; }
+    respondJson(res, 200, await testElevenLabsConnection()); return;
+  }
+
+  if (url.pathname === "/api/metricool-connection") {
+    if (req.method === "GET") { respondJson(res, 200, readMetricoolConnectionStatus()); return; }
+    if (req.method === "POST") { try { const body = await readJsonBody(req); saveMetricoolConnection(envPath, typeof body?.apiKey === "string" ? body.apiKey : "", typeof body?.userId === "string" ? body.userId : "", typeof body?.blogId === "string" ? body.blogId : ""); respondJson(res, 200, readMetricoolConnectionStatus()); } catch (error) { respondJson(res, 400, { error: (error as Error).message }); } return; }
+    respondJson(res, 405, { error: "Method not allowed" }); return;
+  }
+  if (url.pathname === "/api/metricool-connection/test") {
+    if (req.method !== "POST") { respondJson(res, 405, { error: "Method not allowed" }); return; }
+    respondJson(res, 200, await testMetricoolConnection()); return;
+  }
+
+  if (url.pathname === "/api/revenuecat-connection") {
+    if (req.method === "GET") { respondJson(res, 200, readRevenueCatConnectionStatus()); return; }
+    if (req.method === "POST") { try { const body = await readJsonBody(req); const result = await configureRevenueCatConnection(envPath, typeof body?.apiKey === "string" ? body.apiKey : "", typeof body?.projectId === "string" ? body.projectId : undefined); respondJson(res, result.test === "failed" ? 400 : 200, result); } catch (error) { respondJson(res, 400, { error: (error as Error).message }); } return; }
+    respondJson(res, 405, { error: "Method not allowed" }); return;
+  }
+  if (url.pathname === "/api/revenuecat-connection/test") {
+    if (req.method !== "POST") { respondJson(res, 405, { error: "Method not allowed" }); return; }
+    respondJson(res, 200, await testRevenueCatConnection()); return;
+  }
+
+  if (url.pathname === "/api/content-review-access") {
+    if (req.method === "GET") { respondJson(res, 200, readContentReviewAccessStatus()); return; }
+    if (req.method === "POST") { try { const body = await readJsonBody(req); saveContentReviewAccess(envPath, typeof body?.credential === "string" ? body.credential : ""); respondJson(res, 200, { configured: true }); } catch (error) { respondJson(res, 400, { error: (error as Error).message }); } return; }
+    respondJson(res, 405, { error: "Method not allowed" }); return;
+  }
+
+  if (url.pathname === "/api/production-access") {
+    if (req.method === "GET") { respondJson(res, 200, readProductionAccessStatus()); return; }
+    if (req.method === "POST") { try { const body = await readJsonBody(req); saveProductionAccess(envPath, typeof body?.credential === "string" ? body.credential : ""); respondJson(res, 200, { configured: true }); } catch (error) { respondJson(res, 400, { error: (error as Error).message }); } return; }
+    respondJson(res, 405, { error: "Method not allowed" }); return;
+  }
+
+  if (url.pathname === "/api/publishing-access") {
+    if (req.method === "GET") { respondJson(res, 200, readPublishingAccessStatus()); return; }
+    if (req.method === "POST") { try { const body = await readJsonBody(req); savePublishingAccess(envPath, typeof body?.credential === "string" ? body.credential : ""); respondJson(res, 200, { configured: true }); } catch (error) { respondJson(res, 400, { error: (error as Error).message }); } return; }
+    respondJson(res, 405, { error: "Method not allowed" }); return;
+  }
+
+  if (url.pathname === "/api/content-review-decision") {
+    if (req.method !== "POST") {
+      respondJson(res, 405, { error: "Method not allowed" });
+      return;
+    }
+    try {
+      const body = await readJsonBody(req);
+      const response = handleContentReviewDecisionCommand({
+        operation: typeof body?.operation === "string" ? body.operation as never : undefined,
+        proposalId: typeof body?.proposalId === "string" ? body.proposalId : undefined,
+        reason: typeof body?.reason === "string" ? body.reason : undefined,
+      }, req.headers["x-novara-content-review-key"] as string | undefined);
+      respondJson(res, response.status === "invalid-request" ? 400 : response.result.status === "rejected" ? 400 : 201, response);
+    } catch (error) {
+      respondJson(res, 400, { error: (error as Error).message });
+    }
+    return;
+  }
+
+  if (url.pathname === "/api/publishing-queue") {
+    if (req.method !== "GET") {
+      respondJson(res, 405, { error: "Method not allowed" });
+      return;
+    }
+    const response = handlePublishingQueueReadCommand({
+      operation: url.searchParams.get("operation") as "listEntries" | "getEntry" | undefined,
+      queueEntryId: url.searchParams.get("queueEntryId") ?? undefined,
+    });
+    respondJson(res, response.status === "invalid-request" ? 400 : 200, response);
+    return;
+  }
+
+  if (url.pathname === "/api/publishing-queue-enqueue") {
+    if (req.method !== "POST") {
+      respondJson(res, 405, { error: "Method not allowed" });
+      return;
+    }
+    try {
+      const body = await readJsonBody(req);
+      const response = handlePublishingQueueEnqueueCommand({
+        operation: typeof body?.operation === "string" ? body.operation as never : undefined,
+        proposalId: typeof body?.proposalId === "string" ? body.proposalId : undefined,
+      }, req.headers["x-novara-publishing-queue-key"] as string | undefined);
+      respondJson(res, response.status === "invalid-request" ? 400 : response.result.status === "rejected" ? 400 : 201, response);
+    } catch (error) {
+      respondJson(res, 400, { error: (error as Error).message });
+    }
+    return;
+  }
+
+  if (url.pathname === "/api/production-execute") {
+    if (req.method !== "POST") {
+      respondJson(res, 405, { error: "Method not allowed" });
+      return;
+    }
+    try {
+      const body = await readJsonBody(req);
+      const response = await handleProductionExecutionCommand({
+        operation: body?.operation,
+        proposalId: typeof body?.proposalId === "string" ? body.proposalId : undefined,
+      }, req.headers["x-novara-production-key"] as string | undefined);
+      respondJson(res, response.status === "invalid-request" ? 400 : 200, response);
+    } catch {
+      respondJson(res, 400, { error: "Invalid production execution request" });
+    }
+    return;
+  }
+
+  if (url.pathname === "/api/production-approval") {
+    if (req.method !== "POST") { respondJson(res, 405, { error: "Method not allowed" }); return; }
+    try {
+      const body = await readJsonBody(req);
+      const response = handleProductionApprovalCommand({ operation: body?.operation, proposalId: typeof body?.proposalId === "string" ? body.proposalId : undefined, productionBriefId: typeof body?.productionBriefId === "string" ? body.productionBriefId : undefined, decision: body?.decision, reason: typeof body?.reason === "string" ? body.reason : undefined }, req.headers["x-novara-production-key"] as string | undefined);
+      respondJson(res, response.status === "invalid-request" ? 400 : 200, response);
+    } catch { respondJson(res, 400, { error: "Invalid production approval request" }); }
+    return;
+  }
+
+  if (url.pathname === "/api/production-brief") {
+    if (req.method !== "POST") { respondJson(res, 405, { error: "Method not allowed" }); return; }
+    try {
+      const body = await readJsonBody(req);
+      const response = handleProductionBriefCommand({ operation: body?.operation, proposalId: typeof body?.proposalId === "string" ? body.proposalId : undefined }, req.headers["x-novara-production-key"] as string | undefined);
+      respondJson(res, response.status === "invalid-request" ? 400 : 200, response);
+    } catch { respondJson(res, 400, { error: "Invalid Production Brief request" }); }
+    return;
+  }
+
+  if (url.pathname === "/api/institutional-knowledge") {
+    try {
+      const credential = req.headers["x-novara-institutional-knowledge-key"] as string | undefined;
+      if (req.method === "GET") {
+        const response = handleInstitutionalKnowledgeCommand({ operation: (url.searchParams.get("operation") ?? "listProposals") as never, proposalId: url.searchParams.get("proposalId") ?? undefined }, credential);
+        respondJson(res, response.status === "invalid-request" ? 400 : 200, response);
+      } else if (req.method === "POST") {
+        const body = await readJsonBody(req);
+        const response = handleInstitutionalKnowledgeCommand(body, credential);
+        respondJson(res, response.status === "invalid-request" ? 400 : 200, response);
+      } else respondJson(res, 405, { error: "Method not allowed" });
+    } catch { respondJson(res, 400, { error: "Invalid institutional knowledge request" }); }
+    return;
+  }
+
+  if (url.pathname === "/api/production-status") {
+    if (req.method !== "GET") {
+      respondJson(res, 405, { error: "Method not allowed" });
+      return;
+    }
+    const response = handleProductionStatusCommand({
+      operation: "readProductionStatus",
+      proposalId: url.searchParams.get("proposalId") ?? undefined,
+    }, req.headers["x-novara-production-key"] as string | undefined);
+    respondJson(res, response.status === "invalid-request" ? 400 : response.status === "not-found" ? 404 : 200, response);
+    return;
+  }
+
+  if (url.pathname === "/api/metricool-status") {
+    if (req.method !== "GET") {
+      respondJson(res, 405, { error: "Method not allowed" });
+      return;
+    }
+    const response = await handleMetricoolStatusCommand();
+    respondJson(res, 200, response);
+    return;
+  }
+
+  if (url.pathname === "/api/metricool-preflight") {
+    if (req.method !== "POST") {
+      respondJson(res, 405, { error: "Method not allowed" });
+      return;
+    }
+    try {
+      const body = await readJsonBody(req);
+      const response = await handleMetricoolPreflightCommand({
+        operation: typeof body?.operation === "string" ? body.operation as never : undefined,
+        queueEntryId: typeof body?.queueEntryId === "string" ? body.queueEntryId : undefined,
+      }, req.headers["x-novara-metricool-key"] as string | undefined);
+      respondJson(res, response.status === "invalid-request" ? 400 : response.result.status === "validation-failed" ? 400 : 200, response);
+    } catch (error) {
+      respondJson(res, 400, { error: (error as Error).message });
+    }
+    return;
+  }
+
+  if (url.pathname === "/api/publishing-execute") {
+    if (req.method !== "POST") {
+      respondJson(res, 405, { error: "Method not allowed" });
+      return;
+    }
+    try {
+      const body = await readJsonBody(req);
+      const response = await handleMetricoolPublishingCommand({
+        operation: typeof body?.operation === "string" ? body.operation as never : undefined,
+        queueEntryId: typeof body?.queueEntryId === "string" ? body.queueEntryId : undefined,
+      }, req.headers["x-novara-metricool-publishing-key"] as string | undefined);
+      const resultStatus = response.status === "ok" ? response.result.status : undefined;
+      respondJson(res, response.status === "invalid-request" || resultStatus === "failed" ? 400 : 200, response);
+    } catch (error) {
+      respondJson(res, 400, { error: (error as Error).message });
     }
     return;
   }
 
   if (url.pathname === "/api/hermes/ask") {
     try {
-      const context = await getRuntimeContext();
-      const { runtime, snapshot } = context;
+      const runtime = runtimeHost.getRuntime();
+      const snapshot = await getSnapshot(runtimeHost);
       let question = "";
 
       if (req.method === "POST") {
@@ -555,36 +788,11 @@ const server = createServer(async (req, res) => {
         return;
       }
 
-      if (question && isOpportunityTaskQuestion(question)) {
-        const specialist = runtime.executeSpecialist("A-002", {
-          id: `TASK-HERMES-${Date.now()}`,
-          objective: question,
-          input: {
-            source: "hermes-api",
-            type: "opportunity-research",
-          },
-        });
-
-        const output = specialist.result.output as
-          | {
-              message?: string;
-              structuredResult?: {
-                summary?: string;
-              };
-            }
-          | undefined;
-
-        const answer =
-          output?.structuredResult?.summary ??
-          output?.message ??
-          "Hermes routed the request to A-002, but no summary was returned.";
-
+      const routingResponse = routeHermesRequest(runtime, question, `TASK-HERMES-${Date.now()}`);
+      if (routingResponse) {
         respondJson(res, 200, {
           question,
-          answer,
-          taskId: specialist.taskId,
-          agentId: specialist.agentId,
-          taskStatus: specialist.result.status,
+          ...routingResponse,
         });
         return;
       }
@@ -600,9 +808,19 @@ const server = createServer(async (req, res) => {
   }
 
   await serveStatic(res, url.pathname);
-});
+  });
+}
 
-const port = Number(process.env.NOVARA_UI_PORT ?? 4173);
-server.listen(port, () => {
-  console.log(`Novara command interface running on http://localhost:${port}`);
-});
+if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url))) {
+  await loadEnvFile(envPath);
+  const runtimeHost = createRuntimeHost();
+  const server = createCommandInterfaceServer(runtimeHost);
+  const port = Number(process.env.NOVARA_UI_PORT ?? 4173);
+  server.listen(port, () => {
+    const health = runtimeHost.getHealth();
+    if (!health.initialized) {
+      console.error(`Novara command interface failed runtime initialization: ${health.error}`);
+    }
+    console.log(`Novara command interface running on http://localhost:${port}`);
+  });
+}

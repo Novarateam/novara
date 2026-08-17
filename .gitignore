@@ -2,6 +2,7 @@
 .env.*
 !.env.example
 .novara/runtime/
+.novara/ops/
 
 Novara/Welcome.md
 Novara/.obsidian/

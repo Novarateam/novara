@@ -1,0 +1,12 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+const app = readFileSync(new URL("../public/app.js", import.meta.url), "utf8");
+const server = readFileSync(new URL("./server.ts", import.meta.url), "utf8");
+const command = readFileSync(new URL("./institutional-knowledge-command.ts", import.meta.url), "utf8");
+for (const text of ["INSTITUTIONAL KNOWLEDGE REVIEW", "institutional-knowledge-load", "institutional-knowledge-create", "institutional-knowledge-approve", "institutional-knowledge-reject", "APPROVED - NOT APPLIED", "proposedContent", "baseContentHash"]) assert.match(app, new RegExp(text));
+assert.doesNotMatch(app, /institutional-knowledge-apply|Apply proposal|Apply button/i);
+assert.match(server, /\/api\/institutional-knowledge/);
+assert.doesNotMatch(server, /institutional-knowledge.*apply/i);
+assert.doesNotMatch(command, /writeFile|appendFile|rename|unlink|copyFile|\brm\b|mkdir/);
+assert.doesNotMatch(command, /applyProposal|applyInstitutional/i);
+console.log("Institutional knowledge surface tests passed.");

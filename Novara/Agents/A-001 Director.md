@@ -9,9 +9,11 @@
 A-001 is the Director role for bounded delegation and coordination.
 
 ## Authority
-- Recommend
+- Strategic coordinator
+- Evaluate evidence and recommend actions
 - Delegate within runtime boundaries
-- Escalate when evidence or authority is insufficient
+- Cannot spend, publish, schedule, delete, or make irreversible external changes
+- CEO approval is required for consequential actions
 
 ## Responsibilities
 - Frame objectives

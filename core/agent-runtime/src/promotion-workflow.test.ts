@@ -1,0 +1,65 @@
+import assert from "node:assert/strict";
+import { mkdtempSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { getAgentDefinitions } from "./agent.ts";
+import { createTrendMonitorEvaluationCorpus } from "./intelligence-evaluation-service.ts";
+import { AgentRuntime } from "./runtime.ts";
+
+const storageRoot = mkdtempSync(path.join(tmpdir(), "novara-promotion-"));
+const runtime = new AgentRuntime({ storageRoot });
+for (const definition of getAgentDefinitions()) runtime.registerAgent(definition);
+runtime.runIntelligenceEvaluation({ reportId: "promotion-eval", agentId: "A-012", capability: "trend_monitoring", cases: createTrendMonitorEvaluationCorpus() });
+for (let index = 0; index < 5; index += 1) {
+  const action = { actionId: `promotion-task-${index}`, agentId: "A-012", actionType: "research" as const, capability: "trend_monitoring", purpose: "trend", target: "internal", scope: "company" as const, impactLevel: "low" as const, requestedAt: new Date().toISOString(), operation: "analyse_trend" as const, operationInput: { values: [10, 12, 14, 16] } };
+  runtime.evaluateAction(action);
+  const handoff = runtime.handoffTask({ actionId: action.actionId, taskId: `promotion-task-record-${index}` });
+  runtime.claimTask({ taskId: handoff.task!.id, claimingAgentId: "A-012" });
+  runtime.attemptExecution({ taskId: handoff.task!.id });
+}
+const trust = runtime.generateTrustPerformanceReport("A-012", "promotion-trust");
+const governance = runtime.recordHumanGovernanceDecision({ decisionId: "promotion-governance", agentId: "A-012", trustReportId: trust.reportId, reviewerId: "guido", decision: "approved-for-human-review" });
+assert.equal(governance.status, "created");
+const before = JSON.parse(readFileSync(path.join(storageRoot, "state.json"), "utf8"));
+const proposal = runtime.createPromotionProposal({ proposalId: "proposal-a012", agentId: "A-012", trustReportId: trust.reportId, governanceDecisionId: "promotion-governance", promotionType: "observed-to-trusted" });
+assert.equal(proposal.status, "created");
+if (proposal.status === "created") {
+  assert.deepEqual(proposal.proposal.changedFields, ["status"]);
+  assert.equal(proposal.proposal.currentStatus, "observed");
+  assert.equal(proposal.proposal.proposedStatus, "trusted");
+}
+assert.equal(runtime.applyPromotion({ promotionId: "promotion-a012", proposalId: "proposal-a012", confirmationId: "missing" }).status, "rejected", "confirmation is required");
+const afterProposal = JSON.parse(readFileSync(path.join(storageRoot, "state.json"), "utf8"));
+assert.deepEqual(afterProposal.agents, before.agents, "proposal must not mutate agent");
+const confirmation = runtime.confirmPromotion({ confirmationId: "confirmation-a012", proposalId: "proposal-a012", reviewerId: "guido", confirmation: "confirm-promotion" });
+assert.equal(confirmation.status, "confirmed");
+const afterConfirmation = JSON.parse(readFileSync(path.join(storageRoot, "state.json"), "utf8"));
+assert.deepEqual(afterConfirmation.agents, before.agents, "confirmation must not mutate agent");
+const applied = runtime.applyPromotion({ promotionId: "promotion-a012", proposalId: "proposal-a012", confirmationId: "confirmation-a012" });
+assert.equal(applied.status, "applied");
+const after = JSON.parse(readFileSync(path.join(storageRoot, "state.json"), "utf8"));
+const beforeAgent = before.agents.find((agent: any) => agent.id === "A-012");
+const afterAgent = after.agents.find((agent: any) => agent.id === "A-012");
+assert.equal(afterAgent.status, "trusted");
+assert.equal(afterAgent.authorityLevel, beforeAgent.authorityLevel);
+assert.equal(afterAgent.executionState, beforeAgent.executionState);
+assert.deepEqual(afterAgent.capabilities, beforeAgent.capabilities);
+assert.deepEqual(afterAgent.approvalRequirements, beforeAgent.approvalRequirements);
+assert.deepEqual(after.permissionPolicies, before.permissionPolicies);
+assert.deepEqual(after.tasks, before.tasks);
+assert.deepEqual(after.approvalRequests, before.approvalRequests);
+assert.equal(runtime.applyPromotion({ promotionId: "promotion-repeat", proposalId: "proposal-a012", confirmationId: "confirmation-a012" }).status, "rejected", "proposal cannot apply twice");
+assert.equal(runtime.listPromotionHistory().length, 1);
+const reloaded = new AgentRuntime({ storageRoot });
+for (const definition of getAgentDefinitions()) reloaded.registerAgent(definition);
+const reloadedState = JSON.parse(readFileSync(path.join(storageRoot, "state.json"), "utf8"));
+assert.equal(reloadedState.agents.find((agent: any) => agent.id === "A-012")?.status, "trusted");
+assert.equal(reloaded.listPromotionHistory().length, 1);
+const invalidProposal = runtime.createPromotionProposal({ proposalId: "bad", agentId: "A-012", trustReportId: "missing", governanceDecisionId: "promotion-governance", promotionType: "observed-to-trusted" });
+assert.equal(invalidProposal.status, "rejected");
+const audit = readFileSync(path.join(storageRoot, "audit.log"), "utf8");
+assert.match(audit, /promotion\.proposal_created/);
+assert.match(audit, /promotion\.confirmed/);
+assert.match(audit, /promotion\.applied/);
+assert.match(audit, /promotion\.apply_rejected/);
+console.log("Promotion workflow tests passed.");

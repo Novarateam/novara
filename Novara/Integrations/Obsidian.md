@@ -15,5 +15,5 @@ Obsidian is the durable human-readable institutional knowledge layer for Novara.
 - No embeddings, vector search, or persistence architecture
 
 ## Current Vault
-- Path: C:\Development\Novara\Novara
+- Path: <repository root>/Novara
 - Current purpose: curated institutional notes, not full operational state

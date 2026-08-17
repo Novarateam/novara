@@ -42,7 +42,7 @@ export function createMcpServer(runtime: AgentRuntime) {
       },
       {
         name: "executeSpecialist",
-        description: "Execute a specialist agent through the Novara runtime, currently limited to A-002.",
+        description: "Execute a specialist agent through the Novara runtime, currently limited to A-002 (opportunity) and A-014 (content).",
         inputSchema: {
           type: "object",
           properties: {
@@ -112,7 +112,7 @@ export function createMcpServer(runtime: AgentRuntime) {
           content: [
             {
               type: "text",
-              text: JSON.stringify(runtime.executeSpecialist(agentId, task as any), null, 2),
+              text: JSON.stringify(await runtime.executeSpecialist(agentId, task as any), null, 2),
             },
           ],
         };

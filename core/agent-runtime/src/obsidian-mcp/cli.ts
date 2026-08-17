@@ -1,8 +1,8 @@
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { startObsidianReadOnlyMcpServer } from "./server.ts";
 
-function readVaultRootFromArgs(): string | undefined {
-  const args = process.argv.slice(2);
-
+export function readVaultRootFromArgs(args: string[]): string | undefined {
   for (let i = 0; i < args.length; i += 1) {
     if (args[i] === "--vault-root") {
       return args[i + 1];
@@ -12,16 +12,21 @@ function readVaultRootFromArgs(): string | undefined {
   return undefined;
 }
 
-async function main() {
-  const vaultRoot =
-    readVaultRootFromArgs() ??
-    process.env.OBSIDIAN_VAULT_ROOT ??
-    "C:\\Development\\Novara\\Novara";
-
-  await startObsidianReadOnlyMcpServer(vaultRoot);
+export function repositoryVaultRoot(modulePath = fileURLToPath(import.meta.url)): string {
+  return path.resolve(path.dirname(modulePath), "../../../..", "Novara");
 }
 
-main().catch((error) => {
-  console.error(error);
-  process.exit(1);
-});
+export function resolveVaultRoot(args: string[], env: NodeJS.ProcessEnv = process.env, modulePath = fileURLToPath(import.meta.url)): string {
+  return readVaultRootFromArgs(args) ?? env.OBSIDIAN_VAULT_ROOT ?? repositoryVaultRoot(modulePath);
+}
+
+async function main() {
+  await startObsidianReadOnlyMcpServer(resolveVaultRoot(process.argv.slice(2)));
+}
+
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main().catch((error) => {
+    console.error(error);
+    process.exit(1);
+  });
+}

@@ -17,14 +17,16 @@
         height: 100%;
         background: #060708;
         color: #e9ebef;
-        overflow: hidden;
+        overflow-x: hidden;
+        overflow-y: auto;
         font-family: "Inter", sans-serif;
       }
       button,
       input { font: inherit; }
       .app-shell {
         width: 100vw;
-        height: 100vh;
+        min-height: 100vh;
+        height: auto;
         display: flex;
         flex-direction: column;
         background: radial-gradient(circle at top, rgba(126, 224, 255, 0.08), transparent 36%), #060708;

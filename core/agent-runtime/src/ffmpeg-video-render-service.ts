@@ -135,10 +135,10 @@ function buildSceneMotionFilter(inputIndex: number, durationSeconds: number, wid
  * Music is loudness-normalised rather than scaled by a fixed multiplier: the
  * correct gain depends entirely on how the source track was mastered, so a
  * fixed factor makes a quiet track inaudible and a loud one overpower the
- * voice. -28 LUFS sits under typical narration: present, but never competing
+ * voice. -31 LUFS sits under typical narration: present, but never competing
  * with the words.
  */
-const MUSIC_TARGET_LUFS = -28;
+const MUSIC_TARGET_LUFS = -31;
 
 /**
  * Burned-in caption styling. Default SRT rendering is small, thin and bottom-

@@ -51,20 +51,48 @@ function isValidWord(word: NarrationAlignmentWord): boolean {
   return typeof word.text === "string" && word.text.length > 0 && Number.isFinite(word.start) && Number.isFinite(word.end) && word.start >= 0 && word.end >= word.start && Number.isFinite(word.loss);
 }
 
+/**
+ * Short-form caption shape. Whole-sentence cues leave 18 words parked on screen
+ * for 7 seconds, which reads as out of sync with the narration. Vertical video
+ * wants a few words at a time, tracking the voice.
+ */
+const MAX_CUE_WORDS = 3;
+const MAX_CUE_SECONDS = 1.5;
+
 export function deriveSubtitleCues(alignment: NarrationAlignment): SubtitleCue[] | null {
   if (!alignment.narrationText || !Array.isArray(alignment.words) || alignment.words.length === 0) return null;
   const words = alignment.words;
   if (words.some((word, index) => !isValidWord(word) || (index > 0 && word.start < words[index - 1].end))) return null;
+
+  // Forced alignment emits whitespace as its own token. Those carry no text and
+  // would otherwise be joined into the cue as extra spaces.
+  const spoken = words
+    .map((word) => ({ ...word, text: word.text.trim() }))
+    .filter((word) => word.text.length > 0);
+  if (spoken.length === 0) return null;
+
   const cues: SubtitleCue[] = [];
   let group: NarrationAlignmentWord[] = [];
-  for (const word of words) {
+
+  const flush = (): void => {
+    if (group.length === 0) return;
+    cues.push({
+      text: group.map((item) => item.text).join(" "),
+      start: group[0].start,
+      end: group[group.length - 1].end,
+    });
+    group = [];
+  };
+
+  for (const word of spoken) {
     group.push(word);
-    if (/[.!?]["')\]]*$/.test(word.text)) {
-      cues.push({ text: group.map((item) => item.text).join(" "), start: group[0].start, end: group[group.length - 1].end });
-      group = [];
-    }
+    const endsSentence = /[.!?]["')\]]*$/.test(word.text);
+    const tooManyWords = group.length >= MAX_CUE_WORDS;
+    const tooLong = word.end - group[0].start >= MAX_CUE_SECONDS;
+    if (endsSentence || tooManyWords || tooLong) flush();
   }
-  if (group.length) cues.push({ text: group.map((item) => item.text).join(" "), start: group[0].start, end: group[group.length - 1].end });
+  flush();
+
   return cues.every((cue, index) => cue.text.length > 0 && cue.end >= cue.start && (index === 0 || cue.start >= cues[index - 1].end)) ? cues : null;
 }
 

@@ -72,7 +72,40 @@ function replaceSnapshot(root: string, change: (snapshot: ReturnType<RuntimeRepo
   return new RuntimeRepository(new FileRuntimeStore(root));
 }
 
-assert.deepEqual(buildFFmpegArguments("scenes.txt", "audio.mp3", "C:\\assets\\subtitles.srt", "out.mp4", "1080:1920", 10), ["-hide_banner", "-y", "-f", "concat", "-safe", "0", "-i", "scenes.txt", "-i", "audio.mp3", "-filter:v", "scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:color=black,format=yuv420p,subtitles=filename='C\\:/assets/subtitles.srt'", "-r", "30", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k", "-t", "10", "-shortest", "-movflags", "+faststart", "out.mp4"]);
+// Each still becomes its own looped input carrying a zoompan move, the moves
+// concat in scene order, and subtitles burn onto the concatenated result.
+{
+  const args = buildFFmpegArguments(
+    [{ imagePath: "a.png", durationSeconds: 4 }, { imagePath: "b.png", durationSeconds: 6 }],
+    "audio.mp3",
+    "C:\\assets\\subtitles.srt",
+    "out.mp4",
+    "1080:1920",
+    10,
+  );
+  const filterComplex = args[args.indexOf("-filter_complex") + 1];
+
+  // Each still enters as a single frame; zoompan's `d` expands it. Looping the
+  // input instead would multiply every scene and truncate the video in scene 1.
+  assert.deepEqual(args.slice(0, 6), ["-hide_banner", "-y", "-i", "a.png", "-i", "b.png"]);
+  assert.deepEqual(args.slice(6, 8), ["-i", "audio.mp3"]);
+  // Narration is the input after the stills, and the burned video is mapped out.
+  assert.deepEqual([args[args.indexOf("-map") + 1], args[args.lastIndexOf("-map") + 1]], ["[vout]", "2:a"]);
+  // 4s and 6s at 30fps become explicit zoompan frame counts.
+  assert.ok(filterComplex.includes("d=120") && filterComplex.includes("d=180"));
+  // Alternating push then pull.
+  assert.ok(filterComplex.includes("z='min(1+0.0009*on,1.15)'") && filterComplex.includes("z='max(1.15-0.0009*on,1)'"));
+  // Stills are supersampled to 1620x2880 before the zoom, then output at 1080x1920.
+  assert.ok(filterComplex.includes("scale=1620:2880:force_original_aspect_ratio=increase") && filterComplex.includes("s=1080x1920"));
+  assert.ok(filterComplex.includes("[v0][v1]concat=n=2:v=1:a=0[vcat]"));
+  // Captions burn onto the concatenated video with explicit styling, not the
+  // thin bottom-anchored default an untouched SRT would render.
+  assert.ok(filterComplex.includes("format=yuv420p,subtitles=filename='C\\:/assets/subtitles.srt':force_style='"));
+  assert.ok(filterComplex.includes("Bold=1") && filterComplex.includes("Outline=2") && filterComplex.includes("MarginV=60"));
+  assert.ok(filterComplex.endsWith("[vout]"));
+  assert.ok(filterComplex.includes("[vcat]eq=contrast=") && filterComplex.includes("vignette="));
+  assert.deepEqual(args.slice(-15), ["-r", "30", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k", "-t", "10", "-movflags", "+faststart", "out.mp4"]);
+}
 
 // Missing tools fail before claim and never create output.
 for (const missing of ["ffmpeg", "ffprobe"] as const) {

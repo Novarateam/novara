@@ -134,7 +134,9 @@ function createRepository(root: string): { repository: RuntimeRepository; briefI
   if (subtitleResult.status !== "completed") throw new Error("subtitle setup failed");
   assert.equal(subtitleResult.assets.length, 2);
   const srtAsset = subtitleResult.assets.find((asset) => asset.mimeType === "application/x-subrip")!;
-  assert.equal(readFileSync(srtAsset.localPath!, "utf8"), "1\n00:00:00,000 --> 00:00:01,200\nBuild trust first.\n\n2\n00:00:01,700 --> 00:00:03,000\nThen show the proof.\n");
+  // Cues break on sentence end, 3 words, or 1.5s — whichever comes first — so
+  // captions track the voice instead of parking a whole sentence on screen.
+  assert.equal(readFileSync(srtAsset.localPath!, "utf8"), "1\n00:00:00,000 --> 00:00:01,200\nBuild trust first.\n\n2\n00:00:01,700 --> 00:00:02,500\nThen show the\n\n3\n00:00:02,510 --> 00:00:03,000\nproof.\n");
   assert.ok(subtitleResult.assets.every((asset) => existsSync(asset.localPath!) && asset.proposalId === proposal.id && asset.productionBriefId === brief.productionBriefId));
 
   const videoCreated = operations.createVideoOperation(brief, repository);

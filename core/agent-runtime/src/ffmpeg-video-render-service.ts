@@ -73,6 +73,8 @@ export interface VideoRenderConfig {
   ffmpegPath?: string;
   ffprobePath?: string;
   assetRoot?: string;
+  /** Optional licensed music bed mixed under the narration. */
+  musicPath?: string;
 }
 
 export type VideoRenderResult =
@@ -101,12 +103,133 @@ function getOutputSize(brief: ProductionBrief): string | undefined {
   return brief.aspectRatio ? OUTPUT_SIZE_BY_ASPECT[brief.aspectRatio] : undefined;
 }
 
-export function buildFFmpegArguments(sceneListPath: string, narrationPath: string, subtitlePath: string, outputPath: string, outputSize: string, durationSeconds: number): string[] {
+const RENDER_FPS = 30;
+/** Stills are upscaled before zoompan so the zoom steps do not visibly jitter. */
+const MOTION_SUPERSAMPLE = 1.5;
+const MOTION_MAX_ZOOM = 1.15;
+const MOTION_ZOOM_PER_FRAME = 0.0009;
+
+/**
+ * Slow push or pull across each still, alternating direction per scene so a
+ * sequence does not read as one mechanical move. This is what separates a
+ * documentary feel from a slideshow.
+ */
+function buildSceneMotionFilter(inputIndex: number, durationSeconds: number, width: number, height: number): string {
+  const frames = Math.max(1, Math.round(durationSeconds * RENDER_FPS));
+  const superWidth = Math.round((width * MOTION_SUPERSAMPLE) / 2) * 2;
+  const superHeight = Math.round((height * MOTION_SUPERSAMPLE) / 2) * 2;
+  const zoomExpression =
+    inputIndex % 2 === 0
+      ? `min(1+${MOTION_ZOOM_PER_FRAME}*on,${MOTION_MAX_ZOOM})`
+      : `max(${MOTION_MAX_ZOOM}-${MOTION_ZOOM_PER_FRAME}*on,1)`;
+
   return [
-    "-hide_banner", "-y", "-f", "concat", "-safe", "0", "-i", sceneListPath,
+    `[${inputIndex}:v]scale=${superWidth}:${superHeight}:force_original_aspect_ratio=increase`,
+    `crop=${superWidth}:${superHeight}`,
+    `zoompan=z='${zoomExpression}':d=${frames}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=${width}x${height}:fps=${RENDER_FPS}`,
+    `setsar=1[v${inputIndex}]`,
+  ].join(",");
+}
+
+/**
+ * Music is loudness-normalised rather than scaled by a fixed multiplier: the
+ * correct gain depends entirely on how the source track was mastered, so a
+ * fixed factor makes a quiet track inaudible and a loud one overpower the
+ * voice. -28 LUFS sits under typical narration: present, but never competing
+ * with the words.
+ */
+const MUSIC_TARGET_LUFS = -28;
+
+/**
+ * Burned-in caption styling. Default SRT rendering is small, thin and bottom-
+ * anchored, which reads as an untouched subtitle file. Short-form wants heavy
+ * type with a thick outline, lifted clear of the platform UI.
+ *
+ * IMPORTANT: these values are NOT pixels. libass renders SRT against a ~288
+ * tall reference and scales up, so FontSize=20 lands around 130px on a 1920
+ * tall frame and MarginV=60 around 400px. Pixel-sized values here put the text
+ * off-frame entirely. Verified by rendering and sampling a frame.
+ */
+const CAPTION_STYLE = [
+  "FontName=Arial Black",
+  "FontSize=20",
+  "Bold=1",
+  "PrimaryColour=&H00FFFFFF",
+  "OutlineColour=&H00000000",
+  "BorderStyle=1",
+  "Outline=2",
+  "Shadow=1",
+  "Alignment=2",
+  "MarginV=60",
+  "MarginL=40",
+  "MarginR=40",
+].join(",");
+const MUSIC_FADE_IN_SECONDS = 1.5;
+const MUSIC_FADE_OUT_SECONDS = 2.5;
+
+/**
+ * One colour treatment applied to the whole timeline after concat, so every
+ * scene shares a look. Generated stills otherwise arrive with different white
+ * balance and saturation and read as unrelated stock photos rather than one
+ * channel. Deliberately restrained: slight desaturation, mild contrast, a warm
+ * highlight / cool shadow split, and a soft vignette to pull the eye in.
+ */
+const COLOUR_GRADE = [
+  "eq=contrast=1.08:saturation=0.9:gamma=1.02",
+  "colorbalance=rs=0.03:bs=-0.03:rh=0.02:bh=-0.02",
+  "vignette=PI/5",
+].join(",");
+
+export function buildFFmpegArguments(
+  scenes: Array<{ imagePath: string; durationSeconds: number }>,
+  narrationPath: string,
+  subtitlePath: string,
+  outputPath: string,
+  outputSize: string,
+  durationSeconds: number,
+  musicPath?: string,
+): string[] {
+  const [width, height] = outputSize.split(":").map((value) => Number(value));
+  // Each still must enter as exactly ONE frame. zoompan's `d` is output frames
+  // PER INPUT FRAME, so looping the input multiplies the scene length and the
+  // output gets truncated inside scene one.
+  const inputs: string[] = [];
+  for (const scene of scenes) {
+    inputs.push("-i", scene.imagePath);
+  }
+
+  const narrationIndex = scenes.length;
+  const musicIndex = narrationIndex + 1;
+
+  const motion = scenes.map((scene, index) => buildSceneMotionFilter(index, scene.durationSeconds, width, height));
+  const concatInputs = scenes.map((_scene, index) => `[v${index}]`).join("");
+  const filters = [
+    ...motion,
+    `${concatInputs}concat=n=${scenes.length}:v=1:a=0[vcat]`,
+    // original_size pins libass to real pixels. Without it, SRT input renders
+    // against a ~288-tall reference, so pixel-sized margins fall off-frame.
+    // Grade before captions so the text stays pure white, not tinted.
+    `[vcat]${COLOUR_GRADE},format=yuv420p,subtitles=filename='${quoteSubtitleFilterPath(subtitlePath)}':force_style='${CAPTION_STYLE}'[vout]`,
+  ];
+
+  if (musicPath) {
+    const fadeOutStart = Math.max(0, durationSeconds - MUSIC_FADE_OUT_SECONDS);
+    filters.push(
+      `[${musicIndex}:a]loudnorm=I=${MUSIC_TARGET_LUFS}:TP=-2:LRA=11,afade=t=in:st=0:d=${MUSIC_FADE_IN_SECONDS},afade=t=out:st=${fadeOutStart.toFixed(3)}:d=${MUSIC_FADE_OUT_SECONDS}[mus]`,
+      `[${narrationIndex}:a][mus]amix=inputs=2:duration=first:normalize=0[aout]`,
+    );
+  }
+
+  return [
+    "-hide_banner", "-y",
+    ...inputs,
     "-i", narrationPath,
-    "-filter:v", `scale=${outputSize}:force_original_aspect_ratio=decrease,pad=${outputSize}:(ow-iw)/2:(oh-ih)/2:color=black,format=yuv420p,subtitles=filename='${quoteSubtitleFilterPath(subtitlePath)}'`,
-    "-r", "30", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k", "-t", String(durationSeconds), "-shortest", "-movflags", "+faststart", outputPath,
+    // Looped so a short bed still covers the whole video.
+    ...(musicPath ? ["-stream_loop", "-1", "-i", musicPath] : []),
+    "-filter_complex", filters.join(";"),
+    "-map", "[vout]", "-map", musicPath ? "[aout]" : `${narrationIndex}:a`,
+    "-r", String(RENDER_FPS), "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k",
+    "-t", String(durationSeconds), "-movflags", "+faststart", outputPath,
   ];
 }
 
@@ -122,6 +245,7 @@ export class FFmpegVideoRenderService {
       ffmpegPath: options.config?.ffmpegPath ?? process.env.NOVARA_FFMPEG_PATH?.trim() ?? "ffmpeg",
       ffprobePath: options.config?.ffprobePath ?? process.env.NOVARA_FFPROBE_PATH?.trim() ?? "ffprobe",
       assetRoot: options.config?.assetRoot ?? path.resolve(process.cwd(), ".novara/runtime/assets"),
+      musicPath: options.config?.musicPath ?? process.env.NOVARA_MUSIC_PATH?.trim() ?? "",
     };
   }
 
@@ -182,16 +306,24 @@ export class FFmpegVideoRenderService {
       sceneListPath = path.join(workDir, "scenes.txt");
       outputPath = path.join(workDir, `${operationId}.mp4`);
       finalPath = path.join(this.config.assetRoot, `${operationId}.mp4`);
+      // Scene timings now drive per-image zoompan inputs directly, so the
+      // concat list only remains as a record of what was rendered.
       const listLines: string[] = [];
       scenes.forEach((scene, index) => { listLines.push(`file '${quoteConcatPath(imagePaths[index])}'`, `duration ${scene.durationSeconds}`); });
-      listLines.push(`file '${quoteConcatPath(imagePaths[imagePaths.length - 1])}'`);
       writeFileSync(sceneListPath, `${listLines.join("\n")}\n`, "utf8");
     } catch {
       const unknown = this.operations.markUnknown(operationId, "Render workspace persistence failed after the operation was claimed; the local result is unknown.", repository, new Date().toISOString());
       return { status: "unknown-result", operation: unknown.status === "updated" ? unknown.operation : undefined, reason: "Render workspace persistence failed after the operation was claimed; the local result is unknown." };
     }
 
-    const render = await this.executor.run(this.config.ffmpegPath, buildFFmpegArguments(sceneListPath, narrationAsset.localPath, subtitleAsset.localPath, outputPath, outputSize, narrationProbe.durationSeconds));
+    const renderScenes = scenes.map((scene, index) => ({ imagePath: imagePaths[index], durationSeconds: scene.durationSeconds ?? 0 }));
+    // A configured-but-missing music file must not silently render without it.
+    const musicPath = this.config.musicPath && localReadable(this.config.musicPath) ? this.config.musicPath : undefined;
+    if (this.config.musicPath && !musicPath) {
+      const failed = this.operations.fail(operationId, "Configured music bed is missing or unreadable.", repository, new Date().toISOString());
+      return { status: "failed", operation: failed.status === "updated" ? failed.operation : undefined, reason: "Configured music bed is missing or unreadable." };
+    }
+    const render = await this.executor.run(this.config.ffmpegPath, buildFFmpegArguments(renderScenes, narrationAsset.localPath, subtitleAsset.localPath, outputPath, outputSize, narrationProbe.durationSeconds, musicPath));
     if (render.status === "unknown") {
       const unknown = this.operations.markUnknown(operationId, render.reason, repository, new Date().toISOString());
       return unknown.status === "updated" ? { status: "unknown-result", operation: unknown.operation, reason: unknown.reason } : { status: "unknown-result", reason: render.reason };
